@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#1f2937">
   <title>My Finance</title>
-  <link rel="stylesheet" href="styles.css?v=20260927-1217">
+  <link rel="stylesheet" href="styles.css?v=20260927-1530">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -37,7 +37,7 @@
     <header class="topbar">
       <div>
         <p class="eyebrow">Personal Finance</p>
-        <h1 id="pageTitle">Dashboard</h1>
+        <h1 id="pageTitle">Current Month Payments</h1>
       </div>
       <div class="top-actions">
         <span id="userEmail" class="small muted user-email"></span>
@@ -48,19 +48,24 @@
     </header>
 
     <nav class="tabs">
-      <button class="tab active" data-view="dashboard">Dashboard</button>
-      <button class="tab" data-view="payments">Payments Map</button>
+      <button class="tab active" data-view="payments">Current Month Payments</button>
+      <button class="tab" data-view="dashboard">Dashboard</button>
       <button class="tab" data-view="loans">Loans</button>
       <button class="tab" data-view="salaries">Salary Definitions</button>
       <button class="tab" data-view="charts">Charts</button>
       <button class="tab" data-view="accounts">Accounts</button>
     </nav>
 
-    <section id="dashboardView" class="view active">
+    <section id="dashboardView" class="view">
       <div class="dashboard-title-row">
         <div>
           <div class="small muted">Current Solar month</div>
           <h2 id="dashMonth">—</h2>
+        </div>
+        <div class="toolbar dashboard-year-control">
+          <button id="dashPrevYear" class="ghost" type="button">← Year</button>
+          <select id="dashYear"></select>
+          <button id="dashNextYear" class="ghost" type="button">Year →</button>
         </div>
       </div>
 
@@ -105,21 +110,10 @@
       </div>
     </section>
 
-    <section id="paymentsView" class="view">
-      <div class="toolbar">
-        <button id="prevYearBtn" class="ghost">← Year</button>
-        <select id="payYear"></select>
-        <button id="nextYearBtn" class="ghost">Year →</button>
-        <button id="todayMonthBtn" class="ghost">Current month</button>
-      </div>
-
-      <article class="card" style="margin-bottom:14px">
-        <h2>Solar year payment map</h2>
-        <div id="yearMap" class="year-map"></div>
-      </article>
-
+    <section id="paymentsView" class="view active">
       <div class="toolbar">
         <div>
+          <div class="small muted">Current Solar month</div>
           <h2 id="selectedMonthTitle" style="margin:0"></h2>
           <div id="paymentCountLabel" class="small muted"></div>
         </div>
@@ -135,7 +129,7 @@
       <article class="card calendar-card" style="margin-bottom:14px">
         <div class="section-head">
           <div>
-            <h2 id="calendarMonthTitle">Solar month calendar</h2>
+            <h2 id="calendarMonthTitle">Current month calendar</h2>
             <div class="small muted">Green = paid · Red = unpaid</div>
           </div>
         </div>
@@ -146,7 +140,7 @@
       </article>
 
       <article class="card">
-        <h2>Payments in selected month</h2>
+        <h2>Current month payments by due day</h2>
         <div id="paymentsList" class="list"></div>
       </article>
     </section>
@@ -174,6 +168,12 @@
             <div class="small muted">Y axis: T · X axis: Solar months or years</div>
           </div>
           <div class="chart-controls">
+            <label>Chart
+              <select id="chartType">
+                <option value="bar">Histogram / Bar</option>
+                <option value="line">Linear / Line</option>
+              </select>
+            </label>
             <label>View
               <select id="chartMode">
                 <option value="year">Year</option>
@@ -441,13 +441,13 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js?v=20260927-1217", { updateViaCache: "none" }).catch(() => {});
+      navigator.serviceWorker.register("./sw.js?v=20260927-1530", { updateViaCache: "none" }).catch(() => {});
     }
     if ("caches" in window) {
       caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
     }
   </script>
-  <script src="config.js?v=20260927-1217"></script>
-  <script src="app.js?v=20260927-1217"></script>
+  <script src="config.js?v=20260927-1530"></script>
+  <script src="app.js?v=20260927-1530"></script>
 </body>
 </html>
