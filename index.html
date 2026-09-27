@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#1f2937">
   <title>My Finance</title>
-  <link rel="stylesheet" href="styles.css?v=20260927-1700">
+  <link rel="stylesheet" href="styles.css?v=20260927-1735">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -146,7 +146,7 @@
         <div class="chart-toolbar">
           <div>
             <h2 id="chartTitle">Cash-flow chart</h2>
-            <div class="small muted">Default range: current Solar month −12 through +23 · 36 months</div>
+            <div class="small muted">Month-based default: current Solar month −12 through +23 · 36 months</div>
           </div>
 
           <div id="chartControls" class="chart-controls">
@@ -157,28 +157,39 @@
               </select>
             </label>
 
-            <div class="chart-date-group">
-              <span>Start date</span>
-              <div class="chart-date-pair">
-                <select id="chartStartYear" aria-label="Start Solar year"></select>
-                <select id="chartStartMonth" aria-label="Start Solar month"><option value="1">Farvardin</option><option value="2">Ordibehesht</option><option value="3">Khordad</option><option value="4">Tir</option><option value="5">Mordad</option><option value="6">Shahrivar</option><option value="7">Mehr</option><option value="8">Aban</option><option value="9">Azar</option><option value="10">Dey</option><option value="11">Bahman</option><option value="12">Esfand</option></select>
-              </div>
-            </div>
-
-            <div class="chart-date-group">
-              <span>End date</span>
-              <div class="chart-date-pair">
-                <select id="chartEndYear" aria-label="End Solar year"></select>
-                <select id="chartEndMonth" aria-label="End Solar month"><option value="1">Farvardin</option><option value="2">Ordibehesht</option><option value="3">Khordad</option><option value="4">Tir</option><option value="5">Mordad</option><option value="6">Shahrivar</option><option value="7">Mehr</option><option value="8">Aban</option><option value="9">Azar</option><option value="10">Dey</option><option value="11">Bahman</option><option value="12">Esfand</option></select>
-              </div>
-            </div>
-
-            <label>X-axis step
-              <select id="chartStep">
-                <option value="month" selected>Month</option>
-                <option value="year">Year</option>
+            <label>Basis
+              <select id="chartBasis">
+                <option value="month" selected>Month-based</option>
+                <option value="year">Year-based</option>
               </select>
             </label>
+
+            <div id="chartMonthRange" class="chart-range-group">
+              <div class="chart-date-group">
+                <span>Start date</span>
+                <div class="chart-date-pair">
+                  <select id="chartStartYear" aria-label="Start Solar year"></select>
+                  <select id="chartStartMonth" aria-label="Start Solar month"><option value="1">Farvardin</option><option value="2">Ordibehesht</option><option value="3">Khordad</option><option value="4">Tir</option><option value="5">Mordad</option><option value="6">Shahrivar</option><option value="7">Mehr</option><option value="8">Aban</option><option value="9">Azar</option><option value="10">Dey</option><option value="11">Bahman</option><option value="12">Esfand</option></select>
+                </div>
+              </div>
+
+              <div class="chart-date-group">
+                <span>End date</span>
+                <div class="chart-date-pair">
+                  <select id="chartEndYear" aria-label="End Solar year"></select>
+                  <select id="chartEndMonth" aria-label="End Solar month"><option value="1">Farvardin</option><option value="2">Ordibehesht</option><option value="3">Khordad</option><option value="4">Tir</option><option value="5">Mordad</option><option value="6">Shahrivar</option><option value="7">Mehr</option><option value="8">Aban</option><option value="9">Azar</option><option value="10">Dey</option><option value="11">Bahman</option><option value="12">Esfand</option></select>
+                </div>
+              </div>
+            </div>
+
+            <div id="chartYearRange" class="chart-range-group hidden">
+              <label>Start year
+                <select id="chartYearStart"></select>
+              </label>
+              <label>End year
+                <select id="chartYearEnd"></select>
+              </label>
+            </div>
 
             <label class="toggle-label"><input id="chartPaymentsOn" type="checkbox" checked> Total payments</label>
             <label class="toggle-label"><input id="chartEarningsOn" type="checkbox" checked> Earnings</label>
@@ -193,6 +204,7 @@
           <span class="chart-color earning-color"></span> Earnings are blue
           <span class="chart-color remaining-color"></span> Remaining payments are red
           <span class="chart-color payment-color"></span> Paid payments are green
+          <span class="current-marker-dot"></span> Current month marker is black
         </div>
       </article>
     </section>
@@ -442,13 +454,13 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js?v=20260927-1700", { updateViaCache: "none" }).catch(() => {});
+      navigator.serviceWorker.register("./sw.js?v=20260927-1735", { updateViaCache: "none" }).catch(() => {});
     }
     if ("caches" in window) {
       caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
     }
   </script>
-  <script src="config.js?v=20260927-1700"></script>
-  <script src="app.js?v=20260927-1700"></script>
+  <script src="config.js?v=20260927-1735"></script>
+  <script src="app.js?v=20260927-1735"></script>
 </body>
 </html>
