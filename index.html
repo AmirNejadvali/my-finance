@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#1f2937">
   <title>My Finance</title>
-  <link rel="stylesheet" href="styles.css?v=20260927-1635">
+  <link rel="stylesheet" href="styles.css?v=20260927-1640">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -167,13 +167,14 @@
             <label id="chartDecadeWrap" class="hidden">Decade
               <select id="chartDecade"></select>
             </label>
+            <label class="toggle-label"><input id="chartPaymentsOn" type="checkbox" checked> Total payments</label>
             <label class="toggle-label"><input id="chartEarningsOn" type="checkbox" checked> Earnings</label>
             <label class="toggle-label"><input id="chartRemainingOn" type="checkbox" checked> Remaining payments</label>
             <label class="toggle-label"><input id="chartPaidOn" type="checkbox" checked> Paid payments</label>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="cashflowChart"></canvas></div>
-        <div class="chart-note"><span class="chart-color earning-color"></span> Earnings are blue <span class="chart-color remaining-color"></span> Remaining payments are red <span class="chart-color payment-color"></span> Paid payments are green</div>
+        <div class="chart-note"><span class="chart-color total-payment-color"></span> Total payments are black <span class="chart-color earning-color"></span> Earnings are blue <span class="chart-color remaining-color"></span> Remaining payments are red <span class="chart-color payment-color"></span> Paid payments are green</div>
       </article>
     </section>
 
@@ -422,13 +423,13 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js?v=20260927-1635", { updateViaCache: "none" }).catch(() => {});
+      navigator.serviceWorker.register("./sw.js?v=20260927-1640", { updateViaCache: "none" }).catch(() => {});
     }
     if ("caches" in window) {
       caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
     }
   </script>
-  <script src="config.js?v=20260927-1635"></script>
-  <script src="app.js?v=20260927-1635"></script>
+  <script src="config.js?v=20260927-1640"></script>
+  <script src="app.js?v=20260927-1640"></script>
 </body>
 </html>
