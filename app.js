@@ -6,13 +6,18 @@ const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_PUBLISHAB
 const $ = id => document.getElementById(id);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
 const MONTHS = ["Farvardin","Ordibehesht","Khordad","Tir","Mordad","Shahrivar","Mehr","Aban","Azar","Dey","Bahman","Esfand"];
-const CURRENCIES = ["TOMAN","AZN","USD","EUR","IRR"];
 
 let user = null;
-let accounts = [], transactions = [], budgets = [], loans = [], payments = [];
+let accounts = [];
+let loans = [];
+let payments = [];
+let salaries = [];
+let salaryMonths = [];
 let selected = currentJalali();
 let selectedYear = selected.jy;
 let selectedMonth = selected.jm;
+let chartInstance = null;
+let adminKey = "";
 
 function toast(msg) {
   const el = $("toast");
@@ -22,58 +27,46 @@ function toast(msg) {
   toast._t = setTimeout(() => el.classList.remove("show"), 2600);
 }
 function esc(v) {
-  return String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 function n(v) { return Number(v || 0); }
 function money(v, currency="TOMAN") {
   return new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(Math.round(n(v))) + " " + currency;
 }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
 function currentJalali() {
   const parts = new Intl.DateTimeFormat("en-US-u-ca-persian",{year:"numeric",month:"numeric",day:"numeric"}).formatToParts(new Date());
-  const pick = t => Number(parts.find(p => p.type === t)?.value || 0);
+  const pick = t => Number((parts.find(p => p.type === t) || {}).value || 0);
   return {jy: pick("year"), jm: pick("month"), jd: pick("day")};
 }
 function addJMonth(jy, jm, offset) {
   const idx = jy * 12 + (jm - 1) + offset;
-  return {jy: Math.floor(idx / 12), jm: (idx % 12 + 12) % 12 + 1};
+  return {jy: Math.floor(idx / 12), jm: ((idx % 12) + 12) % 12 + 1};
 }
-function monthKey(jy,jm) { return jy * 100 + jm; }
-function monthText(jy,jm) { return `${MONTHS[jm-1]} ${jy}`; }
-function isPastMonth(jy,jm) { return monthKey(jy,jm) < monthKey(selected.jy,selected.jm); }
-function isCurrentMonth(jy,jm) { return jy===selected.jy && jm===selected.jm; }
-function groupMoney(rows, amountFn, currencyFn) {
-  const m = {};
-  rows.forEach(r => { const c=currencyFn(r)||"TOMAN"; m[c]=(m[c]||0)+amountFn(r); });
-  const keys=Object.keys(m);
-  return keys.length ? keys.map(c=>money(m[c],c)).join(" · ") : "0";
+function monthSpan(sy,sm,ey,em) {
+  return (ey*12+(em-1))-(sy*12+(sm-1))+1;
 }
-function accountBalance(a) {
-  let b = n(a.opening_balance);
-  transactions.forEach(t => {
-    if (t.type === "income" && t.account_id === a.id) b += n(t.amount);
-    if (t.type === "expense" && t.account_id === a.id) b -= n(t.amount);
-    if (t.type === "transfer") {
-      if (t.account_id === a.id) b -= n(t.amount);
-      if (t.to_account_id === a.id) b += n(t.amount);
-    }
-  });
-  return b;
-}
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+function monthKey(jy,jm){ return jy*100+jm; }
+function monthText(jy,jm){ return MONTHS[jm-1] + " " + jy; }
+function isPastMonth(jy,jm){ return monthKey(jy,jm) < monthKey(selected.jy,selected.jm); }
+function isCurrentMonth(jy,jm){ return jy===selected.jy && jm===selected.jm; }
 
 async function signIn() {
   const email = $("email").value.trim();
   const password = $("password").value;
   $("authMsg").textContent = "Signing in...";
-  const {data,error} = await sb.auth.signInWithPassword({email,password});
-  if (error) { $("authMsg").textContent = error.message; return; }
-  await enter(data.user);
+  const r = await sb.auth.signInWithPassword({email,password});
+  if (r.error) { $("authMsg").textContent = r.error.message; return; }
+  await enter(r.data.user);
 }
 async function createAccount() {
   const email = $("email").value.trim();
   const password = $("password").value;
   const key = $("accessKey").value;
-  if (!email || !password || !key) { $("authMsg").textContent = "Email, password and access key are required."; return; }
+  if (!email || !password || !key) {
+    $("authMsg").textContent = "Email, password and access key are required.";
+    return;
+  }
   $("authMsg").textContent = "Creating account...";
   try {
     const res = await fetch(cfg.INVITE_SIGNUP_URL,{
@@ -93,9 +86,8 @@ async function enter(u) {
   const access = await sb.from("app_users").select("user_id").eq("user_id",u.id).maybeSingle();
   if (access.error || !access.data) {
     await sb.auth.signOut();
-    $("authView").classList.remove("hidden");
-    $("appView").classList.add("hidden");
-    $("authMsg").textContent = "This account is not approved. Create it using the access key.";
+    showAuth();
+    $("authMsg").textContent = "This account is not approved.";
     return;
   }
   user = u;
@@ -104,174 +96,213 @@ async function enter(u) {
   $("appView").classList.remove("hidden");
   await refreshAll();
 }
-function showAuth(){
-  user=null;
+function showAuth() {
+  user = null;
+  adminKey = "";
   $("appView").classList.add("hidden");
   $("authView").classList.remove("hidden");
 }
+
 async function refreshAll() {
-  const [ar,tr,br,lr,pr] = await Promise.all([
+  const rs = await Promise.all([
     sb.from("accounts").select("*").order("created_at"),
-    sb.from("transactions").select("*").order("date",{ascending:false}).order("created_at",{ascending:false}),
-    sb.from("budgets").select("*").order("category"),
     sb.from("loans").select("*").order("created_at",{ascending:false}),
-    sb.from("loan_payments").select("*").order("due_jyear").order("due_jmonth").order("installment_no")
+    sb.from("loan_payments").select("*").order("due_jyear").order("due_jmonth").order("installment_no"),
+    sb.from("salary_definitions").select("*").order("created_at",{ascending:false}),
+    sb.from("salary_months").select("*").order("due_jyear").order("due_jmonth")
   ]);
-  const err = [ar,tr,br,lr,pr].find(x=>x.error)?.error;
-  if (err) { toast(err.message); return; }
-  accounts=ar.data||[]; transactions=tr.data||[]; budgets=br.data||[]; loans=lr.data||[]; payments=pr.data||[];
+  const err = rs.find(x=>x.error);
+  if (err) { toast(err.error.message); return; }
+  accounts = rs[0].data || [];
+  loans = rs[1].data || [];
+  payments = rs[2].data || [];
+  salaries = rs[3].data || [];
+  salaryMonths = rs[4].data || [];
   renderAll();
 }
-function renderAll(){
+function renderAll() {
   renderDashboard();
-  renderLoans();
   renderPayments();
-  renderTransactions();
+  renderLoans();
+  renderSalaries();
   renderAccounts();
-  renderBudgets();
-  fillAccountSelects();
+  renderChartControls();
+  renderChart();
 }
 
+function paymentTotals(jy,jm) {
+  const rows = payments.filter(p=>p.due_jyear===jy && p.due_jmonth===jm);
+  const due = rows.reduce((s,p)=>s+n(p.amount),0);
+  const paid = rows.filter(p=>p.is_paid).reduce((s,p)=>s+n(p.amount),0);
+  return {rows,due,paid,remaining:Math.max(0,due-paid)};
+}
+function earningTotal(jy,jm) {
+  return salaryMonths.filter(s=>s.due_jyear===jy && s.due_jmonth===jm).reduce((sum,s)=>sum+n(s.amount),0);
+}
+
+function dashboardHeatColor(due,remaining) {
+  if (due <= 0) return "heat-none";
+  if (remaining <= 0) return "heat-green";
+  const paidRatio = (due-remaining)/due;
+  if (paidRatio <= 0.25) return "heat-red";
+  if (paidRatio <= 0.60) return "heat-orange";
+  return "heat-yellow";
+}
 function renderDashboard() {
-  const balances = accounts.map(a=>({currency:a.currency,amount:accountBalance(a)}));
-  $("totalBalance").textContent = groupMoney(balances,x=>x.amount,x=>x.currency);
-  const now = new Date(), y=now.getFullYear(), m=now.getMonth();
-  const mt = transactions.filter(t=>{const d=new Date(t.date+"T12:00:00");return d.getFullYear()===y&&d.getMonth()===m;});
-  $("monthIncome").textContent = groupMoney(mt.filter(t=>t.type==="income"),t=>n(t.amount),t=>t.currency);
-  $("monthExpense").textContent = groupMoney(mt.filter(t=>t.type==="expense"),t=>n(t.amount),t=>t.currency);
+  const curP = paymentTotals(selected.jy,selected.jm);
+  const curE = earningTotal(selected.jy,selected.jm);
+  $("dashMonth").textContent = monthText(selected.jy,selected.jm);
+  $("dashEarnings").textContent = money(curE);
+  $("dashPayments").textContent = money(curP.due);
+  $("dashRemaining").textContent = money(curP.remaining);
+  $("dashNet").textContent = money(curE-curP.due);
 
-  const cur = payments.filter(p=>p.due_jyear===selected.jy && p.due_jmonth===selected.jm);
-  const due = cur.reduce((s,p)=>s+n(p.amount),0);
-  const rem = cur.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0);
-  const outstanding = payments.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0);
-  $("currentSolarMonth").textContent = monthText(selected.jy,selected.jm);
-  $("monthLoanDue").textContent = money(due);
-  $("monthLoanRemaining").textContent = money(rem);
-  $("loanOutstanding").textContent = money(outstanding);
+  const year = selected.jy;
+  $("heatYearLabel").textContent = String(year);
+  $("paymentHeatmap").innerHTML = MONTHS.map((name,i)=>{
+    const m=i+1, t=paymentTotals(year,m), cls=dashboardHeatColor(t.due,t.remaining);
+    return '<button class="heat-month '+cls+'" data-heat-month="'+m+'">' +
+      '<span class="heat-name">'+name+'</span>' +
+      '<span class="heat-due">'+money(t.due)+'</span>' +
+      '<span class="heat-rem">'+(t.due ? money(t.remaining)+" remaining" : "No payment")+'</span>' +
+      '</button>';
+  }).join("");
 
-  const recent = transactions.slice(0,6);
-  $("recentTransactions").innerHTML = recent.length ? recent.map(t=>{
-    const sign=t.type==="income"?"+":t.type==="expense"?"−":"↔";
-    return `<div class="row"><div><div class="row-title">${esc(t.category||t.type)}</div><div class="small muted">${esc(t.description||t.date)}</div></div><div class="${t.type==="income"?"good":t.type==="expense"?"bad":""}">${sign} ${money(t.amount,t.currency)}</div><div class="mobile-hide muted">${esc(t.date)}</div><div class="optional"></div><div></div></div>`;
-  }).join("") : '<div class="empty">No transactions yet.</div>';
+  const upcoming = payments
+    .filter(p=>!p.is_paid && monthKey(p.due_jyear,p.due_jmonth)>=monthKey(selected.jy,selected.jm))
+    .sort((a,b)=>monthKey(a.due_jyear,a.due_jmonth)-monthKey(b.due_jyear,b.due_jmonth) || a.installment_no-b.installment_no)
+    .slice(0,8);
+  $("dashUpcoming").innerHTML = upcoming.length ? upcoming.map(p=>{
+    const l=loans.find(x=>x.id===p.loan_id);
+    return '<div class="row compact-row"><div><div class="row-title">'+esc(l ? l.name : "Loan")+'</div><div class="small muted">'+monthText(p.due_jyear,p.due_jmonth)+' · day '+p.due_day+'</div></div><div>'+money(p.amount)+'</div><div><span class="pill '+(isPastMonth(p.due_jyear,p.due_jmonth)?"bad":"warn")+'">'+(isPastMonth(p.due_jyear,p.due_jmonth)?"Overdue":"Unpaid")+'</span></div></div>';
+  }).join("") : '<div class="empty">No unpaid loan payments.</div>';
+}
 
-  const next = payments.filter(p=>!p.is_paid && monthKey(p.due_jyear,p.due_jmonth)>=monthKey(selected.jy,selected.jm)).slice(0,6);
-  $("nextPayments").innerHTML = next.length ? next.map(p=>{
+function renderPayments() {
+  const years = new Set();
+  for(let y=selected.jy-5;y<=selected.jy+20;y++) years.add(y);
+  payments.forEach(p=>years.add(p.due_jyear));
+  salaryMonths.forEach(s=>years.add(s.due_jyear));
+  const ys=Array.from(years).sort((a,b)=>a-b);
+  $("payYear").innerHTML = ys.map(y=>'<option value="'+y+'" '+(y===selectedYear?"selected":"")+'>'+y+'</option>').join("");
+
+  $("yearMap").innerHTML = MONTHS.map((name,i)=>{
+    const m=i+1, t=paymentTotals(selectedYear,m);
+    const cls=(m===selectedMonth?"active ":"")+(selectedYear===selected.jy&&m===selected.jm?"current":"");
+    return '<button class="month-card '+cls+'" data-month="'+m+'">' +
+      '<div class="month-name">'+name+'</div>' +
+      '<div class="month-money">'+money(t.due)+'</div>' +
+      '<div class="month-sub">'+t.rows.length+' payment'+(t.rows.length===1?"":"s")+' · '+money(t.remaining)+' remaining</div>' +
+      '</button>';
+  }).join("");
+  renderSelectedMonth();
+}
+function renderSelectedMonth() {
+  const t=paymentTotals(selectedYear,selectedMonth);
+  $("selectedMonthTitle").textContent=monthText(selectedYear,selectedMonth);
+  $("paymentCountLabel").textContent=t.rows.length+' payment'+(t.rows.length===1?"":"s");
+  $("payDue").textContent=money(t.due);
+  $("payPaid").textContent=money(t.paid);
+  $("payRemaining").textContent=money(t.remaining);
+  $("payOutstanding").textContent=money(payments.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0));
+
+  $("paymentsList").innerHTML=t.rows.length?t.rows.map(p=>{
     const loan=loans.find(l=>l.id===p.loan_id);
-    return `<div class="row"><div><div class="row-title">${esc(loan?.name||"Loan")}</div><div class="small muted">Installment ${p.installment_no}</div></div><div>${money(p.amount)}</div><div class="mobile-hide">${monthText(p.due_jyear,p.due_jmonth)}</div><div class="optional">day ${p.due_day}</div><div><span class="pill warn">Unpaid</span></div></div>`;
-  }).join("") : '<div class="empty">No upcoming unpaid loan payments.</div>';
+    const badge=p.is_paid?'<span class="pill good">Paid</span>':isPastMonth(p.due_jyear,p.due_jmonth)?'<span class="pill bad">Overdue</span>':isCurrentMonth(p.due_jyear,p.due_jmonth)?'<span class="pill warn">Due</span>':'<span class="pill">Upcoming</span>';
+    return '<div class="row">' +
+      '<div><div class="row-title">'+esc(loan?loan.name:"Loan")+'</div><div class="small muted">Installment '+p.installment_no+' · day '+p.due_day+'</div></div>' +
+      '<div>'+money(p.amount)+'</div><div class="mobile-hide">'+badge+'</div>' +
+      '<div class="optional small muted">'+(p.paid_at ? "Paid "+new Date(p.paid_at).toLocaleDateString("en-US-u-ca-persian") : "Not paid")+'</div>' +
+      '<div><input class="pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div></div>';
+  }).join(""):'<div class="empty">No loan payments in this Solar month.</div>';
+}
+async function togglePayment(id,checked) {
+  const r=await sb.from("loan_payments").update({is_paid:checked,paid_at:checked?new Date().toISOString():null}).eq("id",id);
+  if(r.error){toast(r.error.message);return;}
+  await refreshAll();
 }
 
-function loanFinancials(l, lp) {
-  const principal = n(l.total_amount);
-  const scheduled = lp.reduce((s,p)=>s+n(p.amount),0);
-  const finalPayable = n(l.final_payable_amount) || scheduled;
-  const interest = Math.max(0, n(l.interest_amount) || (finalPayable-principal));
-  const rate = principal > 0 ? (interest/principal)*100 : 0;
-  return {principal,scheduled,finalPayable,interest,rate};
+function loanFinancials(l,lp) {
+  const principal=n(l.total_amount);
+  const finalPayable=n(l.final_payable_amount)||lp.reduce((s,p)=>s+n(p.amount),0);
+  const interest=Math.max(0,n(l.interest_amount)||(finalPayable-principal));
+  const rate=principal>0?interest/principal*100:0;
+  return {principal,finalPayable,interest,rate};
 }
-
 function renderLoans() {
-  $("loansGrid").innerHTML = loans.length ? loans.map(l=>{
+  $("loansGrid").innerHTML=loans.length?loans.map(l=>{
     const lp=payments.filter(p=>p.loan_id===l.id);
     const paid=lp.filter(p=>p.is_paid);
     const rem=lp.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0);
     const pct=lp.length?Math.round(paid.length*100/lp.length):0;
     const f=loanFinancials(l,lp);
-    const mode=l.repayment_mode==="manual"?"Manual schedule":"Equal installments";
-    return `<div class="mini-card">
-      <h3>${esc(l.name)}</h3>
-      <div class="small muted">${esc(l.lender||"Loan")} · ${mode}</div>
-      <div class="loan-figures">
-        <div><span class="small muted">Original</span><span>${money(f.principal)}</span></div>
-        <div><span class="small muted">Final payable</span><span>${money(f.finalPayable)}</span></div>
-        <div><span class="small muted">Total interest</span><span>${money(f.interest)} (${f.rate.toFixed(1)}%)</span></div>
-      </div>
-      <div class="small muted">${monthText(l.start_jyear,l.start_jmonth)} → ${monthText(l.end_jyear,l.end_jmonth)} · ${lp.length} payments</div>
-      <div class="progress"><span style="width:${pct}%"></span></div>
-      <div class="small">${paid.length}/${lp.length} paid · Remaining ${money(rem)}</div>
-      <div class="small muted">${l.repayment_mode==="equal"&&l.installment_amount ? "Installment "+money(l.installment_amount)+" · " : ""}due day ${l.due_day}</div>
-      <div class="mini-actions"><button class="ghost loan-open-map" data-id="${l.id}">View payments</button><button class="ghost danger loan-delete" data-id="${l.id}">Delete</button></div>
-    </div>`;
-  }).join("") : '<div class="empty full">No loans defined yet. Add your first loan.</div>';
+    return '<div class="mini-card">' +
+      '<h3>'+esc(l.name)+'</h3>' +
+      '<div class="small muted">'+esc(l.lender||"Loan")+' · '+(l.repayment_mode==="manual"?"Manual schedule":"Equal installments")+'</div>' +
+      '<div class="loan-figures">' +
+        '<div><span class="small muted">Original</span><span>'+money(f.principal)+'</span></div>' +
+        '<div><span class="small muted">Final payable</span><span>'+money(f.finalPayable)+'</span></div>' +
+        '<div><span class="small muted">Interest</span><span>'+money(f.interest)+' ('+f.rate.toFixed(1)+'%)</span></div>' +
+      '</div>' +
+      '<div class="small muted">'+monthText(l.start_jyear,l.start_jmonth)+' → '+monthText(l.end_jyear,l.end_jmonth)+' · '+lp.length+' payments</div>' +
+      '<div class="progress"><span style="width:'+pct+'%"></span></div>' +
+      '<div class="small">'+paid.length+'/'+lp.length+' paid · Remaining '+money(rem)+'</div>' +
+      '<div class="mini-actions"><button class="ghost loan-edit" data-id="'+l.id+'">Edit</button><button class="ghost loan-open-map" data-id="'+l.id+'">Payments</button><button class="ghost danger loan-delete" data-id="'+l.id+'">Delete</button></div>' +
+      '</div>';
+  }).join(""):'<div class="empty full">No loans defined yet.</div>';
 }
-
-function monthSpan(startYear,startMonth,endYear,endMonth){
-  return (endYear*12+(endMonth-1))-(startYear*12+(startMonth-1))+1;
-}
-
-function currentManualAmounts(){
+function currentManualAmounts() {
   const map={};
   $$("#manualScheduleRows .manual-payment-input").forEach(input=>{map[input.dataset.key]=input.value;});
   return map;
 }
-
-function buildManualSchedule(preserve=true){
-  const sy=Number($("loanStartYear").value), sm=Number($("loanStartMonth").value);
-  const ey=Number($("loanEndYear").value), em=Number($("loanEndMonth").value);
+function buildManualSchedule(preserve=true) {
+  const sy=n($("loanStartYear").value), sm=n($("loanStartMonth").value), ey=n($("loanEndYear").value), em=n($("loanEndMonth").value);
   const rows=$("manualScheduleRows");
   if(!sy||!sm||!ey||!em){rows.innerHTML="";updateLoanSummary();return;}
   const count=monthSpan(sy,sm,ey,em);
-  if(count<1||count>600){
-    rows.innerHTML='<div class="small bad">End month must be after the start month.</div>';
-    updateLoanSummary();
-    return;
-  }
+  if(count<1||count>600){rows.innerHTML='<div class="small bad">End month must be after the start month.</div>';updateLoanSummary();return;}
   const old=preserve?currentManualAmounts():{};
   const fill=n($("manualFillAmount").value);
   rows.innerHTML=Array.from({length:count},(_,i)=>{
-    const d=addJMonth(sy,sm,i), key=`${d.jy}-${d.jm}`;
-    const val=old[key] ?? (fill>0?String(Math.round(fill)):"");
-    return `<div class="schedule-row">
-      <span>${monthText(d.jy,d.jm)}</span>
-      <input class="manual-payment-input" data-key="${key}" data-jyear="${d.jy}" data-jmonth="${d.jm}" type="number" min="1" step="1" value="${esc(val)}" placeholder="Payment amount">
-    </div>`;
+    const d=addJMonth(sy,sm,i), key=d.jy+"-"+d.jm, val=old[key] != null ? old[key] : (fill>0?String(Math.round(fill)):"");
+    return '<div class="schedule-row"><span>'+monthText(d.jy,d.jm)+'</span><input class="manual-payment-input" data-key="'+key+'" data-jyear="'+d.jy+'" data-jmonth="'+d.jm+'" type="number" min="1" step="1" value="'+esc(val)+'" placeholder="Payment amount"></div>';
   }).join("");
   $("manualPaymentCount").textContent=String(count);
   updateLoanSummary();
 }
-
-function fillManualSchedule(){
+function fillManualSchedule() {
   const value=Math.round(n($("manualFillAmount").value));
-  if(value<=0){toast("Enter a monthly amount to fill the schedule.");return;}
+  if(value<=0){toast("Enter a monthly amount first.");return;}
   $$("#manualScheduleRows .manual-payment-input").forEach(input=>{input.value=String(value);});
   updateLoanSummary();
 }
-
-function updateLoanSummary(){
+function updateLoanSummary() {
   const principal=Math.round(n($("loanTotal").value));
   const mode=$("loanRepaymentMode").value;
-  let finalPayable=0, count=0, endText="—";
-
+  let finalPayable=0,count=0,endText="—";
   if(mode==="equal"){
     count=Math.max(0,Math.round(n($("loanCount").value)));
     const installment=Math.round(n($("loanInstallment").value));
     finalPayable=count*installment;
-    const sy=Number($("loanStartYear").value), sm=Number($("loanStartMonth").value);
-    if(sy&&sm&&count>0){
-      const d=addJMonth(sy,sm,count-1);
-      endText=monthText(d.jy,d.jm);
-    }
-  } else {
+    const sy=n($("loanStartYear").value),sm=n($("loanStartMonth").value);
+    if(sy&&sm&&count){const d=addJMonth(sy,sm,count-1);endText=monthText(d.jy,d.jm);}
+  }else{
     const inputs=$$("#manualScheduleRows .manual-payment-input");
     count=inputs.length;
     finalPayable=inputs.reduce((s,input)=>s+Math.round(n(input.value)),0);
-    const ey=Number($("loanEndYear").value), em=Number($("loanEndMonth").value);
-    if(ey&&em) endText=monthText(ey,em);
+    const ey=n($("loanEndYear").value),em=n($("loanEndMonth").value);
+    if(ey&&em)endText=monthText(ey,em);
   }
-
   const interest=finalPayable-principal;
-  const rate=principal>0?(interest/principal)*100:0;
+  const rate=principal>0?interest/principal*100:0;
   $("loanEndText").textContent=endText;
   $("loanFinalAmount").textContent=money(finalPayable);
   $("loanInterestAmount").textContent=money(Math.max(0,interest));
   $("loanInterestRate").textContent=(interest>=0?rate:0).toFixed(1)+"%";
-  $("loanSummaryWarning").textContent=principal>0&&finalPayable>0&&finalPayable<principal
-    ? "Final payable amount cannot be lower than the original loan amount."
-    : "";
+  $("loanSummaryWarning").textContent=principal>0&&finalPayable>0&&finalPayable<principal?"Final payable amount cannot be lower than the original loan amount.":"";
 }
-
-function syncLoanMode(){
+function syncLoanMode() {
   const manual=$("loanRepaymentMode").value==="manual";
   $("equalLoanFields").classList.toggle("hidden",manual);
   $("manualLoanFields").classList.toggle("hidden",!manual);
@@ -279,230 +310,321 @@ function syncLoanMode(){
   $("loanInstallment").required=!manual;
   $("loanEndYear").required=manual;
   $("loanEndMonth").required=manual;
-  if(manual) buildManualSchedule(true);
+  if(manual)buildManualSchedule(true);
   updateLoanSummary();
 }
-
-function openLoanDialog() {
-  const c=currentJalali();
+function openLoanDialog(loanId=null) {
   $("loanForm").reset();
-  $("loanRepaymentMode").value="equal";
-  $("loanStartYear").value=c.jy;
-  $("loanStartMonth").value=c.jm;
-  $("loanCount").value=12;
-  $("loanDueDay").value=1;
-  const defaultEnd=addJMonth(c.jy,c.jm,11);
-  $("loanEndYear").value=defaultEnd.jy;
-  $("loanEndMonth").value=defaultEnd.jm;
-  $("manualFillAmount").value="";
-  $("manualScheduleRows").innerHTML="";
-  $("manualPaymentCount").textContent="0";
-  syncLoanMode();
-  $("loanDialog").showModal();
-}
+  $("loanId").value=loanId||"";
+  $("loanModalTitle").textContent=loanId?"Edit loan":"Add loan";
+  const c=currentJalali();
+  $("loanStartYear").value=c.jy;$("loanStartMonth").value=c.jm;$("loanCount").value=12;$("loanDueDay").value=1;
+  const de=addJMonth(c.jy,c.jm,11);$("loanEndYear").value=de.jy;$("loanEndMonth").value=de.jm;
+  $("loanRepaymentMode").value="equal";$("manualFillAmount").value="";$("manualScheduleRows").innerHTML="";$("manualPaymentCount").textContent="0";
 
+  if(loanId){
+    const l=loans.find(x=>x.id===loanId);if(!l)return;
+    const lp=payments.filter(p=>p.loan_id===loanId).sort((a,b)=>monthKey(a.due_jyear,a.due_jmonth)-monthKey(b.due_jyear,b.due_jmonth));
+    $("loanName").value=l.name||"";$("loanLender").value=l.lender||"";$("loanTotal").value=l.total_amount||"";
+    $("loanStartYear").value=l.start_jyear;$("loanStartMonth").value=l.start_jmonth;$("loanEndYear").value=l.end_jyear;$("loanEndMonth").value=l.end_jmonth;
+    $("loanDueDay").value=l.due_day||1;$("loanNotes").value=l.notes||"";
+    const same=lp.length>0 && lp.every(p=>n(p.amount)===n(lp[0].amount));
+    const mode=(l.repayment_mode==="manual"||!same)?"manual":"equal";
+    $("loanRepaymentMode").value=mode;
+    if(mode==="equal"){
+      $("loanCount").value=lp.length||l.payment_count||1;$("loanInstallment").value=lp.length?lp[0].amount:l.installment_amount;
+    }else{
+      syncLoanMode();
+      const map={};lp.forEach(p=>{map[p.due_jyear+"-"+p.due_jmonth]=p.amount;});
+      $$("#manualScheduleRows .manual-payment-input").forEach(input=>{if(map[input.dataset.key]!=null)input.value=map[input.dataset.key];});
+    }
+  }
+  syncLoanMode();updateLoanSummary();$("loanDialog").showModal();
+}
+function loanScheduleFromForm() {
+  const mode=$("loanRepaymentMode").value,sy=n($("loanStartYear").value),sm=n($("loanStartMonth").value);
+  if(mode==="equal"){
+    const count=Math.round(n($("loanCount").value)),inst=Math.round(n($("loanInstallment").value));
+    if(count<1||inst<=0)return null;
+    return Array.from({length:count},(_,i)=>{const d=addJMonth(sy,sm,i);return {jyear:d.jy,jmonth:d.jm,amount:inst};});
+  }
+  const inputs=$$("#manualScheduleRows .manual-payment-input");
+  const rows=inputs.map(input=>({jyear:n(input.dataset.jyear),jmonth:n(input.dataset.jmonth),amount:Math.round(n(input.value))}));
+  return rows.length&&rows.every(x=>x.amount>0)?rows:null;
+}
 async function saveLoan(e) {
   e.preventDefault();
-  const name=$("loanName").value.trim(), lender=$("loanLender").value.trim();
-  const principal=Math.round(n($("loanTotal").value));
-  const sy=Number($("loanStartYear").value), sm=Number($("loanStartMonth").value);
-  const dueDay=Number($("loanDueDay").value), mode=$("loanRepaymentMode").value;
-  const notes=$("loanNotes").value.trim();
-  if(!name||principal<=0||!sy||!sm||dueDay<1||dueDay>31){toast("Complete the loan fields.");return;}
-
-  let schedule=[], installment=null, ey, em;
-  if(mode==="equal"){
-    const count=Math.round(n($("loanCount").value));
-    installment=Math.round(n($("loanInstallment").value));
-    if(count<1||installment<=0){toast("Enter the number of payments and installment amount.");return;}
-    const end=addJMonth(sy,sm,count-1); ey=end.jy; em=end.jm;
-    schedule=Array.from({length:count},(_,i)=>{
-      const d=addJMonth(sy,sm,i);
-      return {jyear:d.jy,jmonth:d.jm,amount:installment};
-    });
-  } else {
-    ey=Number($("loanEndYear").value); em=Number($("loanEndMonth").value);
-    if(monthSpan(sy,sm,ey,em)<1){toast("End month must be after the start month.");return;}
-    const inputs=$$("#manualScheduleRows .manual-payment-input");
-    if(!inputs.length){toast("Create the manual payment schedule first.");return;}
-    schedule=inputs.map(input=>({
-      jyear:Number(input.dataset.jyear),
-      jmonth:Number(input.dataset.jmonth),
-      amount:Math.round(n(input.value))
-    }));
-    if(schedule.some(x=>x.amount<=0)){toast("Every month in the manual schedule needs a payment amount.");return;}
-  }
-
+  const id=$("loanId").value||null, name=$("loanName").value.trim(),principal=Math.round(n($("loanTotal").value));
+  const sy=n($("loanStartYear").value),sm=n($("loanStartMonth").value),dueDay=n($("loanDueDay").value),mode=$("loanRepaymentMode").value;
+  const schedule=loanScheduleFromForm();
+  if(!name||principal<=0||!sy||!sm||!schedule){toast("Complete the loan schedule.");return;}
   const finalPayable=schedule.reduce((s,x)=>s+x.amount,0);
   if(finalPayable<principal){toast("Final payable amount cannot be lower than the original loan amount.");return;}
-  const interest=finalPayable-principal;
-  const loanRow={
-    user_id:user.id,name,lender:lender||null,total_amount:principal,
-    start_jyear:sy,start_jmonth:sm,end_jyear:ey,end_jmonth:em,
-    payment_count:schedule.length,installment_amount:mode==="equal"?installment:null,
-    due_day:dueDay,notes:notes||null,repayment_mode:mode,
-    final_payable_amount:finalPayable,interest_amount:interest
+  const last=schedule[schedule.length-1], installment=mode==="equal"?schedule[0].amount:null;
+  const data={
+    name:name,lender:$("loanLender").value.trim(),total_amount:principal,start_jyear:sy,start_jmonth:sm,
+    end_jyear:last.jyear,end_jmonth:last.jmonth,installment_amount:installment,due_day:dueDay,
+    notes:$("loanNotes").value.trim(),repayment_mode:mode,final_payable_amount:finalPayable,interest_amount:finalPayable-principal
   };
-  const ins=await sb.from("loans").insert(loanRow).select().single();
-  if(ins.error){toast(ins.error.message);return;}
-
-  const rows=schedule.map((x,i)=>({
-    loan_id:ins.data.id,user_id:user.id,installment_no:i+1,
-    due_jyear:x.jyear,due_jmonth:x.jmonth,due_day:dueDay,
-    amount:x.amount,is_paid:false
-  }));
-  const p=await sb.from("loan_payments").insert(rows);
-  if(p.error){await sb.from("loans").delete().eq("id",ins.data.id);toast(p.error.message);return;}
-
-  $("loanDialog").close();
-  toast(`Loan added. Final payable: ${money(finalPayable)} · Interest: ${money(interest)}`);
-  await refreshAll();
-}
-
-function renderPayments() {
-  const years = new Set([selected.jy]);
-  for(let y=selected.jy-5;y<=selected.jy+15;y++)years.add(y);
-  payments.forEach(p=>years.add(p.due_jyear));
-  const ys=Array.from(years).sort((a,b)=>a-b);
-  $("payYear").innerHTML=ys.map(y=>`<option value="${y}" ${y===selectedYear?"selected":""}>${y}</option>`).join("");
-  $("yearMap").innerHTML=MONTHS.map((mn,i)=>{
-    const m=i+1, rows=payments.filter(p=>p.due_jyear===selectedYear&&p.due_jmonth===m);
-    const due=rows.reduce((s,p)=>s+n(p.amount),0), rem=rows.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0);
-    const cls=[m===selectedMonth?"active":"",selectedYear===selected.jy&&m===selected.jm?"current":""].join(" ");
-    return `<button class="month-card ${cls}" data-month="${m}">
-      <div class="month-name">${mn}</div>
-      <div class="month-money">${money(due)}</div>
-      <div class="month-sub">${rows.length} payment${rows.length===1?"":"s"} · ${money(rem)} remaining</div>
-    </button>`;
-  }).join("");
-  renderSelectedMonth();
-}
-function renderSelectedMonth(){
-  const rows=payments.filter(p=>p.due_jyear===selectedYear&&p.due_jmonth===selectedMonth).sort((a,b)=>a.installment_no-b.installment_no);
-  const due=rows.reduce((s,p)=>s+n(p.amount),0), paid=rows.filter(p=>p.is_paid).reduce((s,p)=>s+n(p.amount),0), rem=due-paid;
-  const allOutstanding=payments.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0);
-  $("selectedMonthTitle").textContent=monthText(selectedYear,selectedMonth);
-  $("payDue").textContent=money(due);
-  $("payPaid").textContent=money(paid);
-  $("payRemaining").textContent=money(rem);
-  $("payOutstanding").textContent=money(allOutstanding);
-  $("paymentCountLabel").textContent=`${rows.length} payment${rows.length===1?"":"s"}`;
-  $("paymentsList").innerHTML=rows.length?rows.map(p=>{
-    const loan=loans.find(l=>l.id===p.loan_id);
-    const badge=p.is_paid?'<span class="pill good">Paid</span>':isPastMonth(p.due_jyear,p.due_jmonth)?'<span class="pill bad">Overdue</span>':isCurrentMonth(p.due_jyear,p.due_jmonth)?'<span class="pill warn">Due</span>':'<span class="pill">Upcoming</span>';
-    return `<div class="row">
-      <div><div class="row-title">${esc(loan?.name||"Loan")}</div><div class="small muted">Installment ${p.installment_no} · day ${p.due_day}</div></div>
-      <div>${money(p.amount)}</div>
-      <div class="mobile-hide">${badge}</div>
-      <div class="optional small muted">${p.paid_at ? "Paid "+new Date(p.paid_at).toLocaleDateString("en-US-u-ca-persian") : "Not paid"}</div>
-      <div><input class="pay-toggle" type="checkbox" data-id="${p.id}" ${p.is_paid?"checked":""} title="Mark paid/unpaid"></div>
-    </div>`;
-  }).join(""):'<div class="empty">No loan payments in this Solar month.</div>';
-}
-async function togglePayment(id,checked){
-  const r=await sb.from("loan_payments").update({is_paid:checked,paid_at:checked?new Date().toISOString():null}).eq("id",id);
+  const r=await sb.rpc("save_loan_schedule",{p_loan_id:id,p_loan:data,p_schedule:schedule});
   if(r.error){toast(r.error.message);return;}
-  toast(checked?"Payment marked paid.":"Payment marked unpaid.");
-  await refreshAll();
+  $("loanDialog").close();toast(id?"Loan updated.":"Loan added.");await refreshAll();
 }
 
-function renderTransactions(){
-  const q=($("txSearch")?.value||"").toLowerCase(), type=$("txFilter")?.value||"all";
-  const rows=transactions.filter(t=>(type==="all"||t.type===type)&&(!q||[t.category,t.description,t.date].join(" ").toLowerCase().includes(q)));
-  $("transactionsList").innerHTML=rows.length?rows.map(t=>{
-    const a=accounts.find(x=>x.id===t.account_id), to=accounts.find(x=>x.id===t.to_account_id);
-    return `<div class="row">
-      <div><div class="row-title">${esc(t.category||t.type)}</div><div class="small muted">${esc(t.description||"")}</div></div>
-      <div class="${t.type==="income"?"good":t.type==="expense"?"bad":""}">${money(t.amount,t.currency)}</div>
-      <div class="mobile-hide">${esc(a?.name||"")} ${to?"→ "+esc(to.name):""}</div>
-      <div class="optional muted">${esc(t.date)}</div>
-      <div><button class="ghost danger tx-delete" data-id="${t.id}">Delete</button></div>
-    </div>`;
-  }).join(""):'<div class="empty">No transactions.</div>';
+function salarySchedule(def) {
+  const count=monthSpan(def.start_jyear,def.start_jmonth,def.end_jyear,def.end_jmonth);
+  if(count<1||count>600)return [];
+  const growth=n(def.annual_growth_percent)/100;
+  return Array.from({length:count},(_,i)=>{
+    const d=addJMonth(def.start_jyear,def.start_jmonth,i);
+    const step=Math.floor(i/12);
+    const amount=Math.round(n(def.base_monthly_amount)*Math.pow(1+growth,step));
+    return {jyear:d.jy,jmonth:d.jm,amount:amount};
+  });
 }
-function fillAccountSelects(){
-  const opts=accounts.map(a=>`<option value="${a.id}">${esc(a.name)} (${a.currency})</option>`).join("");
-  $("txAccount").innerHTML=opts; $("txToAccount").innerHTML=opts;
+function renderSalaries() {
+  $("salaryGrid").innerHTML=salaries.length?salaries.map(s=>{
+    const rows=salaryMonths.filter(x=>x.salary_id===s.id);
+    const total=rows.reduce((sum,x)=>sum+n(x.amount),0);
+    const first=rows.length?n(rows[0].amount):n(s.base_monthly_amount);
+    const last=rows.length?n(rows[rows.length-1].amount):n(s.base_monthly_amount);
+    return '<div class="mini-card"><h3>'+esc(s.person_name)+'</h3><div class="small muted">'+esc(s.title||"Salary")+'</div>' +
+      '<div class="loan-figures"><div><span class="small muted">Starting monthly</span><span>'+money(first)+'</span></div><div><span class="small muted">Ending monthly</span><span>'+money(last)+'</span></div><div><span class="small muted">Forecast total</span><span>'+money(total)+'</span></div></div>' +
+      '<div class="small muted">'+monthText(s.start_jyear,s.start_jmonth)+' → '+monthText(s.end_jyear,s.end_jmonth)+' · annual growth '+n(s.annual_growth_percent).toFixed(1)+'%</div>' +
+      '<div class="mini-actions"><button class="ghost salary-edit" data-id="'+s.id+'">Edit</button><button class="ghost danger salary-delete" data-id="'+s.id+'">Delete</button></div></div>';
+  }).join(""):'<div class="empty full">No salary definitions yet.</div>';
 }
-function typeChanged(){
-  const tr=$("txType").value==="transfer";
-  $("txToWrap").classList.toggle("hidden",!tr);
-  $("txCategoryWrap").classList.toggle("hidden",tr);
+function updateSalarySummary() {
+  const def={
+    base_monthly_amount:n($("salaryAmount").value),
+    start_jyear:n($("salaryStartYear").value),start_jmonth:n($("salaryStartMonth").value),
+    end_jyear:n($("salaryEndYear").value),end_jmonth:n($("salaryEndMonth").value),
+    annual_growth_percent:n($("salaryGrowth").value)
+  };
+  const rows=salarySchedule(def);
+  $("salaryMonthsCount").textContent=String(rows.length);
+  $("salaryFirstAmount").textContent=money(rows.length?rows[0].amount:0);
+  $("salaryLastAmount").textContent=money(rows.length?rows[rows.length-1].amount:0);
+  $("salaryForecastTotal").textContent=money(rows.reduce((s,x)=>s+n(x.amount),0));
+  $("salarySummaryWarning").textContent=rows.length?"":"End month must be after the start month.";
 }
-function openTx(){
-  if(!accounts.length){toast("Add an account first.");return;}
-  $("txForm").reset();$("txDate").value=todayISO();$("txType").value="expense";$("txCurrency").value="TOMAN";typeChanged();fillAccountSelects();$("txDialog").showModal();
+function openSalaryDialog(id=null) {
+  $("salaryForm").reset();$("salaryId").value=id||"";$("salaryModalTitle").textContent=id?"Edit salary definition":"Add salary definition";
+  const c=currentJalali(),end=addJMonth(c.jy,c.jm,59);
+  $("salaryStartYear").value=c.jy;$("salaryStartMonth").value=c.jm;$("salaryEndYear").value=end.jy;$("salaryEndMonth").value=end.jm;$("salaryGrowth").value=0;$("salaryPayDay").value=1;
+  if(id){
+    const s=salaries.find(x=>x.id===id);if(!s)return;
+    $("salaryPerson").value=s.person_name||"";$("salaryTitle").value=s.title||"";$("salaryAmount").value=s.base_monthly_amount||"";
+    $("salaryStartYear").value=s.start_jyear;$("salaryStartMonth").value=s.start_jmonth;$("salaryEndYear").value=s.end_jyear;$("salaryEndMonth").value=s.end_jmonth;
+    $("salaryGrowth").value=s.annual_growth_percent||0;$("salaryPayDay").value=s.pay_day||1;$("salaryNotes").value=s.notes||"";
+  }
+  updateSalarySummary();$("salaryDialog").showModal();
 }
-async function saveTx(e){
+async function saveSalary(e) {
   e.preventDefault();
-  const tr=$("txType").value==="transfer";
-  if(tr&&$("txAccount").value===$("txToAccount").value){toast("Choose two different accounts.");return;}
-  const row={user_id:user.id,type:$("txType").value,date:$("txDate").value,amount:Number($("txAmount").value),currency:$("txCurrency").value,account_id:$("txAccount").value,to_account_id:tr?$("txToAccount").value:null,category:tr?null:($("txCategory").value.trim()||"Other"),description:$("txDescription").value.trim()||null};
-  const r=await sb.from("transactions").insert(row);if(r.error){toast(r.error.message);return;}$("txDialog").close();await refreshAll();
+  const id=$("salaryId").value||null;
+  const def={
+    person_name:$("salaryPerson").value.trim(),title:$("salaryTitle").value.trim()||"Salary",
+    base_monthly_amount:Math.round(n($("salaryAmount").value)),
+    start_jyear:n($("salaryStartYear").value),start_jmonth:n($("salaryStartMonth").value),
+    end_jyear:n($("salaryEndYear").value),end_jmonth:n($("salaryEndMonth").value),
+    annual_growth_percent:n($("salaryGrowth").value),pay_day:n($("salaryPayDay").value),
+    notes:$("salaryNotes").value.trim()
+  };
+  const schedule=salarySchedule(def);
+  if(!def.person_name||def.base_monthly_amount<=0||!schedule.length){toast("Complete the salary definition.");return;}
+  const r=await sb.rpc("save_salary_definition",{p_salary_id:id,p_definition:def,p_schedule:schedule});
+  if(r.error){toast(r.error.message);return;}
+  $("salaryDialog").close();toast(id?"Salary definition updated.":"Salary definition added.");await refreshAll();
 }
 
-function renderAccounts(){
-  $("accountsGrid").innerHTML=accounts.length?accounts.map(a=>`<div class="mini-card"><h3>${esc(a.name)}</h3><div class="small muted">${esc(a.type)} · ${a.currency}</div><div style="font-size:22px;font-weight:500;margin-top:10px">${money(accountBalance(a),a.currency)}</div><div class="mini-actions"><button class="ghost danger account-delete" data-id="${a.id}">Delete</button></div></div>`).join(""):'<div class="empty">No accounts.</div>';
+function renderAccounts() {
+  $("accountsGrid").innerHTML=accounts.length?accounts.map(a=>
+    '<div class="mini-card"><h3>'+esc(a.name)+'</h3><div class="small muted">'+esc(a.type)+' · '+esc(a.currency)+'</div><div class="account-value">'+money(a.opening_balance,a.currency)+'</div><div class="mini-actions"><button class="ghost danger account-delete" data-id="'+a.id+'">Delete</button></div></div>'
+  ).join(""):'<div class="empty full">No financial accounts.</div>';
 }
-function openAccount(){ $("accountForm").reset();$("accountCurrency").value="TOMAN";$("accountOpening").value=0;$("accountDialog").showModal(); }
-async function saveAccount(e){
-  e.preventDefault();const row={user_id:user.id,name:$("accountName").value.trim(),type:$("accountType").value,currency:$("accountCurrency").value,opening_balance:Number($("accountOpening").value||0)};
+function openAccount() {
+  $("accountForm").reset();$("accountCurrency").value="TOMAN";$("accountOpening").value=0;$("accountDialog").showModal();
+}
+async function saveAccount(e) {
+  e.preventDefault();
+  const row={user_id:user.id,name:$("accountName").value.trim(),type:$("accountType").value,currency:$("accountCurrency").value,opening_balance:n($("accountOpening").value)};
   const r=await sb.from("accounts").insert(row);if(r.error){toast(r.error.message);return;}$("accountDialog").close();await refreshAll();
 }
 
-function renderBudgets(){
-  const now=new Date(), y=now.getFullYear(),m=now.getMonth();
-  $("budgetsGrid").innerHTML=budgets.length?budgets.map(b=>{
-    const spent=transactions.filter(t=>t.type==="expense"&&t.currency===b.currency&&t.category===b.category&&(()=>{const d=new Date(t.date+"T12:00:00");return d.getFullYear()===y&&d.getMonth()===m})()).reduce((s,t)=>s+n(t.amount),0);
-    const pct=Math.min(100,Math.round(spent/n(b.amount)*100)||0);
-    return `<div class="mini-card"><h3>${esc(b.category)}</h3><div>${money(spent,b.currency)} / ${money(b.amount,b.currency)}</div><div class="progress"><span style="width:${pct}%"></span></div><div class="mini-actions"><button class="ghost danger budget-delete" data-id="${b.id}">Delete</button></div></div>`;
-  }).join(""):'<div class="empty">No budgets.</div>';
+function chartYears() {
+  const set=new Set();
+  for(let y=selected.jy-10;y<=selected.jy+30;y++)set.add(y);
+  payments.forEach(x=>set.add(x.due_jyear));salaryMonths.forEach(x=>set.add(x.due_jyear));
+  return Array.from(set).sort((a,b)=>a-b);
 }
-function openBudget(){ $("budgetForm").reset();$("budgetCurrency").value="TOMAN";$("budgetDialog").showModal(); }
-async function saveBudget(e){
-  e.preventDefault();const row={user_id:user.id,category:$("budgetCategory").value.trim(),amount:Number($("budgetAmount").value),currency:$("budgetCurrency").value};
-  const r=await sb.from("budgets").upsert(row,{onConflict:"user_id,category,currency"});if(r.error){toast(r.error.message);return;}$("budgetDialog").close();await refreshAll();
+function renderChartControls() {
+  const years=chartYears();
+  const yearVal=n($("chartYear").value)||selected.jy;
+  $("chartYear").innerHTML=years.map(y=>'<option value="'+y+'" '+(y===yearVal?"selected":"")+'>'+y+'</option>').join("");
+  const minY=years[0]||selected.jy,maxY=years[years.length-1]||selected.jy;
+  const d0=Math.floor(minY/10)*10,d1=Math.floor(maxY/10)*10;
+  const dec=[];for(let d=d0;d<=d1;d+=10)dec.push(d);
+  const dVal=n($("chartDecade").value)||Math.floor(selected.jy/10)*10;
+  if(!dec.includes(dVal))dec.push(dVal);
+  dec.sort((a,b)=>a-b);
+  $("chartDecade").innerHTML=dec.map(d=>'<option value="'+d+'" '+(d===dVal?"selected":"")+'>'+d+'–'+(d+9)+'</option>').join("");
+  const yearMode=$("chartMode").value==="year";
+  $("chartYearWrap").classList.toggle("hidden",!yearMode);$("chartDecadeWrap").classList.toggle("hidden",yearMode);
+}
+function annualSum(rows,year) {
+  return rows.filter(x=>x.due_jyear===year).reduce((s,x)=>s+n(x.amount),0);
+}
+function renderChart() {
+  if(typeof Chart==="undefined"||!$("cashflowChart"))return;
+  const mode=$("chartMode").value;
+  let labels=[],payData=[],earnData=[];
+  if(mode==="year"){
+    const year=n($("chartYear").value)||selected.jy;
+    labels=MONTHS.slice();
+    payData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1).reduce((s,p)=>s+n(p.amount),0));
+    earnData=MONTHS.map((_,i)=>salaryMonths.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1).reduce((s,p)=>s+n(p.amount),0));
+    $("chartTitle").textContent="Monthly cash-flow · "+year;
+  }else{
+    const start=n($("chartDecade").value)||Math.floor(selected.jy/10)*10;
+    labels=Array.from({length:10},(_,i)=>String(start+i));
+    payData=labels.map(y=>annualSum(payments,Number(y)));
+    earnData=labels.map(y=>annualSum(salaryMonths,Number(y)));
+    $("chartTitle").textContent="Decade cash-flow · "+start+"–"+(start+9);
+  }
+  const datasets=[];
+  if($("chartPaymentsOn").checked)datasets.push({label:"Loan payments",data:payData,backgroundColor:"rgba(34,197,94,.68)",borderColor:"#16a34a",borderWidth:1,borderRadius:5});
+  if($("chartEarningsOn").checked)datasets.push({label:"Earnings",data:earnData,backgroundColor:"rgba(239,68,68,.62)",borderColor:"#dc2626",borderWidth:1,borderRadius:5});
+  if(chartInstance)chartInstance.destroy();
+  chartInstance=new Chart($("cashflowChart"),{
+    type:"bar",
+    data:{labels,datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{usePointStyle:true,boxWidth:8,font:{weight:"normal"}}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+money(ctx.raw)}}},
+      scales:{
+        x:{grid:{display:false},title:{display:true,text:mode==="year"?"Solar month":"Solar year"}},
+        y:{beginAtZero:true,title:{display:true,text:"Toman"},ticks:{callback:v=>new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:1}).format(v)}}
+      }
+    }
+  });
 }
 
-function exportBackup(){
-  const blob=new Blob([JSON.stringify({exported_at:new Date().toISOString(),accounts,transactions,budgets,loans,loan_payments:payments},null,2)],{type:"application/json"});
+async function manageUsersRequest(action,extra={}) {
+  const session=(await sb.auth.getSession()).data.session;
+  if(!session)throw new Error("Sign in first.");
+  const res=await fetch(cfg.MANAGE_USERS_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json","apikey":cfg.SUPABASE_PUBLISHABLE_KEY,"Authorization":"Bearer "+session.access_token},
+    body:JSON.stringify(Object.assign({action,key:adminKey},extra))
+  });
+  const out=await res.json();if(!res.ok)throw new Error(out.error||"Request failed.");return out;
+}
+async function unlockUserManager() {
+  adminKey=$("adminPassKey").value;
+  if(!adminKey){$("adminMsg").textContent="Enter the pass key.";return;}
+  $("adminMsg").textContent="Checking...";
+  try{
+    const out=await manageUsersRequest("list");
+    $("adminMsg").textContent="";
+    renderUsers(out.users||[]);
+    $("adminLocked").classList.add("hidden");$("adminUnlocked").classList.remove("hidden");
+  }catch(e){$("adminMsg").textContent=e.message;}
+}
+function renderUsers(users) {
+  $("usersList").innerHTML=users.length?users.map(u=>
+    '<div class="user-row"><div><div class="row-title">'+esc(u.email||"(no email)")+'</div><div class="small muted">Created '+new Date(u.created_at).toLocaleDateString()+(u.last_sign_in_at?" · Last sign-in "+new Date(u.last_sign_in_at).toLocaleDateString():"")+'</div></div>' +
+    '<div><span class="pill '+(u.approved?"good":"bad")+'">'+(u.approved?"Approved":"Blocked")+'</span></div>' +
+    '<div><button class="ghost user-access-toggle" data-id="'+u.id+'" data-approved="'+(u.approved?"1":"0")+'" '+(u.is_current?"disabled":"")+'>'+(u.approved?"Revoke":"Approve")+'</button></div></div>'
+  ).join(""):'<div class="empty">No users.</div>';
+}
+async function refreshUsers() {
+  try{const out=await manageUsersRequest("list");renderUsers(out.users||[]);}catch(e){toast(e.message);}
+}
+function openUserManager() {
+  adminKey="";$("adminPassKey").value="";$("adminMsg").textContent="";$("usersList").innerHTML="";
+  $("adminLocked").classList.remove("hidden");$("adminUnlocked").classList.add("hidden");$("usersDialog").showModal();
+}
+
+function exportBackup() {
+  const blob=new Blob([JSON.stringify({exported_at:new Date().toISOString(),accounts,loans,loan_payments:payments,salary_definitions:salaries,salary_months:salaryMonths},null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="my-finance-backup-"+todayISO()+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 
-function bind(){
-  $("loginBtn").onclick=signIn;$("signupBtn").onclick=createAccount;$("logoutBtn").onclick=async()=>{await sb.auth.signOut();showAuth();};
+function bind() {
   $("authForm").onsubmit=e=>{e.preventDefault();signIn();};
+  $("signupBtn").onclick=createAccount;
+  $("logoutBtn").onclick=async()=>{await sb.auth.signOut();showAuth();};
+  $("exportBtn").onclick=exportBackup;
+  $("manageUsersBtn").onclick=openUserManager;
+
   $$(".tab").forEach(b=>b.onclick=()=>{
     $$(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");
     $$(".view").forEach(v=>v.classList.remove("active"));$(b.dataset.view+"View").classList.add("active");
     $("pageTitle").textContent=b.textContent.trim();
+    if(b.dataset.view==="charts"){renderChartControls();renderChart();}
   });
   $$("[data-close]").forEach(b=>b.onclick=()=>$(b.dataset.close).close());
-  $("addLoanBtn").onclick=openLoanDialog;$("loanForm").onsubmit=saveLoan;
+
+  $("paymentHeatmap").onclick=e=>{
+    const b=e.target.closest("[data-heat-month]");if(!b)return;
+    selectedYear=selected.jy;selectedMonth=n(b.dataset.heatMonth);document.querySelector('[data-view="payments"]').click();renderPayments();
+  };
+
+  $("yearMap").onclick=e=>{const b=e.target.closest("[data-month]");if(!b)return;selectedMonth=n(b.dataset.month);renderPayments();};
+  $("payYear").onchange=()=>{selectedYear=n($("payYear").value);renderPayments();};
+  $("prevYearBtn").onclick=()=>{selectedYear--;renderPayments();};
+  $("nextYearBtn").onclick=()=>{selectedYear++;renderPayments();};
+  $("todayMonthBtn").onclick=()=>{selectedYear=selected.jy;selectedMonth=selected.jm;renderPayments();};
+  $("paymentsList").onchange=e=>{if(e.target.classList.contains("pay-toggle"))togglePayment(e.target.dataset.id,e.target.checked);};
+
+  $("addLoanBtn").onclick=()=>openLoanDialog();
+  $("loanForm").onsubmit=saveLoan;
   $("loanRepaymentMode").onchange=syncLoanMode;
   ["loanTotal","loanStartYear","loanStartMonth","loanCount","loanInstallment"].forEach(id=>$(id).addEventListener("input",updateLoanSummary));
   ["loanStartYear","loanStartMonth","loanEndYear","loanEndMonth"].forEach(id=>$(id).addEventListener("change",()=>{if($("loanRepaymentMode").value==="manual")buildManualSchedule(true);else updateLoanSummary();}));
   $("manualFillBtn").onclick=fillManualSchedule;
   $("manualScheduleRows").addEventListener("input",e=>{if(e.target.classList.contains("manual-payment-input"))updateLoanSummary();});
-  $("yearMap").onclick=e=>{const b=e.target.closest("[data-month]");if(!b)return;selectedMonth=Number(b.dataset.month);renderPayments();};
-  $("payYear").onchange=()=>{selectedYear=Number($("payYear").value);renderPayments();};
-  $("prevYearBtn").onclick=()=>{selectedYear--;renderPayments();};$("nextYearBtn").onclick=()=>{selectedYear++;renderPayments();};
-  $("todayMonthBtn").onclick=()=>{selectedYear=selected.jy;selectedMonth=selected.jm;renderPayments();};
-  $("paymentsList").onchange=e=>{if(e.target.classList.contains("pay-toggle"))togglePayment(e.target.dataset.id,e.target.checked);};
   $("loansGrid").onclick=async e=>{
-    const del=e.target.closest(".loan-delete"), map=e.target.closest(".loan-open-map");
+    const edit=e.target.closest(".loan-edit"),map=e.target.closest(".loan-open-map"),del=e.target.closest(".loan-delete");
+    if(edit)openLoanDialog(edit.dataset.id);
     if(map){const l=loans.find(x=>x.id===map.dataset.id);if(l){selectedYear=l.start_jyear;selectedMonth=l.start_jmonth;document.querySelector('[data-view="payments"]').click();renderPayments();}}
     if(del&&confirm("Delete this loan and all its payment schedule?")){const r=await sb.from("loans").delete().eq("id",del.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}
   };
-  $("addTxBtn").onclick=openTx;$("txForm").onsubmit=saveTx;$("txType").onchange=typeChanged;$("txSearch").oninput=renderTransactions;$("txFilter").onchange=renderTransactions;
-  $("transactionsList").onclick=async e=>{const b=e.target.closest(".tx-delete");if(b&&confirm("Delete this transaction?")){const r=await sb.from("transactions").delete().eq("id",b.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}};
+
+  $("addSalaryBtn").onclick=()=>openSalaryDialog();
+  $("salaryForm").onsubmit=saveSalary;
+  ["salaryAmount","salaryStartYear","salaryStartMonth","salaryEndYear","salaryEndMonth","salaryGrowth"].forEach(id=>$(id).addEventListener("input",updateSalarySummary));
+  $("salaryGrid").onclick=async e=>{
+    const edit=e.target.closest(".salary-edit"),del=e.target.closest(".salary-delete");
+    if(edit)openSalaryDialog(edit.dataset.id);
+    if(del&&confirm("Delete this salary definition and its forecast?")){const r=await sb.from("salary_definitions").delete().eq("id",del.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}
+  };
+
   $("addAccountBtn").onclick=openAccount;$("accountForm").onsubmit=saveAccount;
-  $("accountsGrid").onclick=async e=>{const b=e.target.closest(".account-delete");if(!b)return;if(transactions.some(t=>t.account_id===b.dataset.id||t.to_account_id===b.dataset.id)){toast("Delete related transactions first.");return;}if(confirm("Delete this account?")){const r=await sb.from("accounts").delete().eq("id",b.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}};
-  $("addBudgetBtn").onclick=openBudget;$("budgetForm").onsubmit=saveBudget;
-  $("budgetsGrid").onclick=async e=>{const b=e.target.closest(".budget-delete");if(b&&confirm("Delete this budget?")){const r=await sb.from("budgets").delete().eq("id",b.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}};
-  $("exportBtn").onclick=exportBackup;
+  $("accountsGrid").onclick=async e=>{
+    const b=e.target.closest(".account-delete");if(!b)return;
+    if(confirm("Delete this financial account?")){const r=await sb.from("accounts").delete().eq("id",b.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}
+  };
+
+  ["chartMode","chartYear","chartDecade","chartPaymentsOn","chartEarningsOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
+
+  $("adminUnlockBtn").onclick=unlockUserManager;
+  $("adminRefreshBtn").onclick=refreshUsers;
+  $("usersList").onclick=async e=>{
+    const b=e.target.closest(".user-access-toggle");if(!b)return;
+    try{
+      await manageUsersRequest("set_access",{user_id:b.dataset.id,approved:b.dataset.approved!=="1"});
+      await refreshUsers();
+    }catch(err){toast(err.message);}
+  };
 }
+
 bind();
-sb.auth.onAuthStateChange((event,session)=>{if(event==="SIGNED_OUT")showAuth();else if(session&&(!user||session.user.id!==user.id))enter(session.user);});
+sb.auth.onAuthStateChange((event,session)=>{
+  if(event==="SIGNED_OUT")showAuth();
+  else if(session&&(!user||session.user.id!==user.id))enter(session.user);
+});
 sb.auth.getSession().then(r=>r.data.session?enter(r.data.session.user):showAuth());
 })();
