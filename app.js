@@ -5,7 +5,7 @@ const cfg = window.APP_CONFIG;
 const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_PUBLISHABLE_KEY);
 const $ = id => document.getElementById(id);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
-const MONTHS = ["Farvardin / فروردین","Ordibehesht / اردیبهشت","Khordad / خرداد","Tir / تیر","Mordad / مرداد","Shahrivar / شهریور","Mehr / مهر","Aban / آبان","Azar / آذر","Dey / دی","Bahman / بهمن","Esfand / اسفند"];
+const MONTHS = ["Farvardin","Ordibehesht","Khordad","Tir","Mordad","Shahrivar","Mehr","Aban","Azar","Dey","Bahman","Esfand"];
 const CURRENCIES = ["TOMAN","AZN","USD","EUR","IRR"];
 
 let user = null;
@@ -162,67 +162,201 @@ function renderDashboard() {
   }).join("") : '<div class="empty">No upcoming unpaid loan payments.</div>';
 }
 
+function loanFinancials(l, lp) {
+  const principal = n(l.total_amount);
+  const scheduled = lp.reduce((s,p)=>s+n(p.amount),0);
+  const finalPayable = n(l.final_payable_amount) || scheduled;
+  const interest = Math.max(0, n(l.interest_amount) || (finalPayable-principal));
+  const rate = principal > 0 ? (interest/principal)*100 : 0;
+  return {principal,scheduled,finalPayable,interest,rate};
+}
+
 function renderLoans() {
   $("loansGrid").innerHTML = loans.length ? loans.map(l=>{
     const lp=payments.filter(p=>p.loan_id===l.id);
     const paid=lp.filter(p=>p.is_paid);
-    const paidAmount=paid.reduce((s,p)=>s+n(p.amount),0);
     const rem=lp.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0);
     const pct=lp.length?Math.round(paid.length*100/lp.length):0;
+    const f=loanFinancials(l,lp);
+    const mode=l.repayment_mode==="manual"?"Manual schedule":"Equal installments";
     return `<div class="mini-card">
       <h3>${esc(l.name)}</h3>
-      <div class="small muted">${esc(l.lender||"Loan")} · ${l.payment_count} payments</div>
-      <div style="margin-top:9px;font-weight:900">${money(l.total_amount)}</div>
-      <div class="small muted">${monthText(l.start_jyear,l.start_jmonth)} → ${monthText(l.end_jyear,l.end_jmonth)}</div>
+      <div class="small muted">${esc(l.lender||"Loan")} · ${mode}</div>
+      <div class="loan-figures">
+        <div><span class="small muted">Original</span><span>${money(f.principal)}</span></div>
+        <div><span class="small muted">Final payable</span><span>${money(f.finalPayable)}</span></div>
+        <div><span class="small muted">Total interest</span><span>${money(f.interest)} (${f.rate.toFixed(1)}%)</span></div>
+      </div>
+      <div class="small muted">${monthText(l.start_jyear,l.start_jmonth)} → ${monthText(l.end_jyear,l.end_jmonth)} · ${lp.length} payments</div>
       <div class="progress"><span style="width:${pct}%"></span></div>
-      <div class="small"><b>${paid.length}/${lp.length}</b> paid · Remaining ${money(rem)}</div>
-      <div class="small muted">Standard installment: ${money(l.installment_amount)} · due day ${l.due_day}</div>
+      <div class="small">${paid.length}/${lp.length} paid · Remaining ${money(rem)}</div>
+      <div class="small muted">${l.repayment_mode==="equal"&&l.installment_amount ? "Installment "+money(l.installment_amount)+" · " : ""}due day ${l.due_day}</div>
       <div class="mini-actions"><button class="ghost loan-open-map" data-id="${l.id}">View payments</button><button class="ghost danger loan-delete" data-id="${l.id}">Delete</button></div>
     </div>`;
   }).join("") : '<div class="empty full">No loans defined yet. Add your first loan.</div>';
 }
-function updateLoanCalc() {
-  const jy=Number($("loanStartYear").value), jm=Number($("loanStartMonth").value), count=Number($("loanCount").value), total=Number($("loanTotal").value);
-  if(jy&&jm&&count){
-    const end=addJMonth(jy,jm,count-1);
-    $("loanEndText").textContent=monthText(end.jy,end.jm);
-  } else $("loanEndText").textContent="—";
-  if(total>0&&count>0&&$("loanInstallment").dataset.manual!=="1"){
-    $("loanInstallment").value=Math.floor(total/count);
-  }
+
+function monthSpan(startYear,startMonth,endYear,endMonth){
+  return (endYear*12+(endMonth-1))-(startYear*12+(startMonth-1))+1;
 }
+
+function currentManualAmounts(){
+  const map={};
+  $$("#manualScheduleRows .manual-payment-input").forEach(input=>{map[input.dataset.key]=input.value;});
+  return map;
+}
+
+function buildManualSchedule(preserve=true){
+  const sy=Number($("loanStartYear").value), sm=Number($("loanStartMonth").value);
+  const ey=Number($("loanEndYear").value), em=Number($("loanEndMonth").value);
+  const rows=$("manualScheduleRows");
+  if(!sy||!sm||!ey||!em){rows.innerHTML="";updateLoanSummary();return;}
+  const count=monthSpan(sy,sm,ey,em);
+  if(count<1||count>600){
+    rows.innerHTML='<div class="small bad">End month must be after the start month.</div>';
+    updateLoanSummary();
+    return;
+  }
+  const old=preserve?currentManualAmounts():{};
+  const fill=n($("manualFillAmount").value);
+  rows.innerHTML=Array.from({length:count},(_,i)=>{
+    const d=addJMonth(sy,sm,i), key=`${d.jy}-${d.jm}`;
+    const val=old[key] ?? (fill>0?String(Math.round(fill)):"");
+    return `<div class="schedule-row">
+      <span>${monthText(d.jy,d.jm)}</span>
+      <input class="manual-payment-input" data-key="${key}" data-jyear="${d.jy}" data-jmonth="${d.jm}" type="number" min="1" step="1" value="${esc(val)}" placeholder="Payment amount">
+    </div>`;
+  }).join("");
+  $("manualPaymentCount").textContent=String(count);
+  updateLoanSummary();
+}
+
+function fillManualSchedule(){
+  const value=Math.round(n($("manualFillAmount").value));
+  if(value<=0){toast("Enter a monthly amount to fill the schedule.");return;}
+  $$("#manualScheduleRows .manual-payment-input").forEach(input=>{input.value=String(value);});
+  updateLoanSummary();
+}
+
+function updateLoanSummary(){
+  const principal=Math.round(n($("loanTotal").value));
+  const mode=$("loanRepaymentMode").value;
+  let finalPayable=0, count=0, endText="—";
+
+  if(mode==="equal"){
+    count=Math.max(0,Math.round(n($("loanCount").value)));
+    const installment=Math.round(n($("loanInstallment").value));
+    finalPayable=count*installment;
+    const sy=Number($("loanStartYear").value), sm=Number($("loanStartMonth").value);
+    if(sy&&sm&&count>0){
+      const d=addJMonth(sy,sm,count-1);
+      endText=monthText(d.jy,d.jm);
+    }
+  } else {
+    const inputs=$$("#manualScheduleRows .manual-payment-input");
+    count=inputs.length;
+    finalPayable=inputs.reduce((s,input)=>s+Math.round(n(input.value)),0);
+    const ey=Number($("loanEndYear").value), em=Number($("loanEndMonth").value);
+    if(ey&&em) endText=monthText(ey,em);
+  }
+
+  const interest=finalPayable-principal;
+  const rate=principal>0?(interest/principal)*100:0;
+  $("loanEndText").textContent=endText;
+  $("loanFinalAmount").textContent=money(finalPayable);
+  $("loanInterestAmount").textContent=money(Math.max(0,interest));
+  $("loanInterestRate").textContent=(interest>=0?rate:0).toFixed(1)+"%";
+  $("loanSummaryWarning").textContent=principal>0&&finalPayable>0&&finalPayable<principal
+    ? "Final payable amount cannot be lower than the original loan amount."
+    : "";
+}
+
+function syncLoanMode(){
+  const manual=$("loanRepaymentMode").value==="manual";
+  $("equalLoanFields").classList.toggle("hidden",manual);
+  $("manualLoanFields").classList.toggle("hidden",!manual);
+  $("loanCount").required=!manual;
+  $("loanInstallment").required=!manual;
+  $("loanEndYear").required=manual;
+  $("loanEndMonth").required=manual;
+  if(manual) buildManualSchedule(true);
+  updateLoanSummary();
+}
+
 function openLoanDialog() {
   const c=currentJalali();
   $("loanForm").reset();
+  $("loanRepaymentMode").value="equal";
   $("loanStartYear").value=c.jy;
   $("loanStartMonth").value=c.jm;
   $("loanCount").value=12;
   $("loanDueDay").value=1;
-  $("loanInstallment").dataset.manual="0";
-  updateLoanCalc();
+  const defaultEnd=addJMonth(c.jy,c.jm,11);
+  $("loanEndYear").value=defaultEnd.jy;
+  $("loanEndMonth").value=defaultEnd.jm;
+  $("manualFillAmount").value="";
+  $("manualScheduleRows").innerHTML="";
+  $("manualPaymentCount").textContent="0";
+  syncLoanMode();
   $("loanDialog").showModal();
 }
+
 async function saveLoan(e) {
   e.preventDefault();
   const name=$("loanName").value.trim(), lender=$("loanLender").value.trim();
-  const total=Math.round(Number($("loanTotal").value)), jy=Number($("loanStartYear").value), jm=Number($("loanStartMonth").value);
-  const count=Number($("loanCount").value), installment=Math.round(Number($("loanInstallment").value)), dueDay=Number($("loanDueDay").value);
+  const principal=Math.round(n($("loanTotal").value));
+  const sy=Number($("loanStartYear").value), sm=Number($("loanStartMonth").value);
+  const dueDay=Number($("loanDueDay").value), mode=$("loanRepaymentMode").value;
   const notes=$("loanNotes").value.trim();
-  if(!name||total<=0||count<1||installment<=0){toast("Complete the loan fields.");return;}
-  if(installment*(count-1)>=total){toast("Installment amount is too high for this total and payment count.");return;}
-  const end=addJMonth(jy,jm,count-1);
-  const loanRow={user_id:user.id,name,lender:lender||null,total_amount:total,start_jyear:jy,start_jmonth:jm,end_jyear:end.jy,end_jmonth:end.jm,payment_count:count,installment_amount:installment,due_day:dueDay,notes:notes||null};
+  if(!name||principal<=0||!sy||!sm||dueDay<1||dueDay>31){toast("Complete the loan fields.");return;}
+
+  let schedule=[], installment=null, ey, em;
+  if(mode==="equal"){
+    const count=Math.round(n($("loanCount").value));
+    installment=Math.round(n($("loanInstallment").value));
+    if(count<1||installment<=0){toast("Enter the number of payments and installment amount.");return;}
+    const end=addJMonth(sy,sm,count-1); ey=end.jy; em=end.jm;
+    schedule=Array.from({length:count},(_,i)=>{
+      const d=addJMonth(sy,sm,i);
+      return {jyear:d.jy,jmonth:d.jm,amount:installment};
+    });
+  } else {
+    ey=Number($("loanEndYear").value); em=Number($("loanEndMonth").value);
+    if(monthSpan(sy,sm,ey,em)<1){toast("End month must be after the start month.");return;}
+    const inputs=$$("#manualScheduleRows .manual-payment-input");
+    if(!inputs.length){toast("Create the manual payment schedule first.");return;}
+    schedule=inputs.map(input=>({
+      jyear:Number(input.dataset.jyear),
+      jmonth:Number(input.dataset.jmonth),
+      amount:Math.round(n(input.value))
+    }));
+    if(schedule.some(x=>x.amount<=0)){toast("Every month in the manual schedule needs a payment amount.");return;}
+  }
+
+  const finalPayable=schedule.reduce((s,x)=>s+x.amount,0);
+  if(finalPayable<principal){toast("Final payable amount cannot be lower than the original loan amount.");return;}
+  const interest=finalPayable-principal;
+  const loanRow={
+    user_id:user.id,name,lender:lender||null,total_amount:principal,
+    start_jyear:sy,start_jmonth:sm,end_jyear:ey,end_jmonth:em,
+    payment_count:schedule.length,installment_amount:mode==="equal"?installment:null,
+    due_day:dueDay,notes:notes||null,repayment_mode:mode,
+    final_payable_amount:finalPayable,interest_amount:interest
+  };
   const ins=await sb.from("loans").insert(loanRow).select().single();
   if(ins.error){toast(ins.error.message);return;}
-  const rows=[];
-  for(let i=0;i<count;i++){
-    const d=addJMonth(jy,jm,i);
-    const amount=i===count-1 ? total-installment*(count-1) : installment;
-    rows.push({loan_id:ins.data.id,user_id:user.id,installment_no:i+1,due_jyear:d.jy,due_jmonth:d.jm,due_day:dueDay,amount,is_paid:false});
-  }
+
+  const rows=schedule.map((x,i)=>({
+    loan_id:ins.data.id,user_id:user.id,installment_no:i+1,
+    due_jyear:x.jyear,due_jmonth:x.jmonth,due_day:dueDay,
+    amount:x.amount,is_paid:false
+  }));
   const p=await sb.from("loan_payments").insert(rows);
   if(p.error){await sb.from("loans").delete().eq("id",ins.data.id);toast(p.error.message);return;}
-  $("loanDialog").close();toast("Loan added.");await refreshAll();
+
+  $("loanDialog").close();
+  toast(`Loan added. Final payable: ${money(finalPayable)} · Interest: ${money(interest)}`);
+  await refreshAll();
 }
 
 function renderPayments() {
@@ -260,7 +394,7 @@ function renderSelectedMonth(){
       <div><div class="row-title">${esc(loan?.name||"Loan")}</div><div class="small muted">Installment ${p.installment_no} · day ${p.due_day}</div></div>
       <div>${money(p.amount)}</div>
       <div class="mobile-hide">${badge}</div>
-      <div class="optional small muted">${p.paid_at ? "Paid "+new Date(p.paid_at).toLocaleDateString("fa-IR-u-ca-persian") : "Not paid"}</div>
+      <div class="optional small muted">${p.paid_at ? "Paid "+new Date(p.paid_at).toLocaleDateString("en-US-u-ca-persian") : "Not paid"}</div>
       <div><input class="pay-toggle" type="checkbox" data-id="${p.id}" ${p.is_paid?"checked":""} title="Mark paid/unpaid"></div>
     </div>`;
   }).join(""):'<div class="empty">No loan payments in this Solar month.</div>';
@@ -308,7 +442,7 @@ async function saveTx(e){
 }
 
 function renderAccounts(){
-  $("accountsGrid").innerHTML=accounts.length?accounts.map(a=>`<div class="mini-card"><h3>${esc(a.name)}</h3><div class="small muted">${esc(a.type)} · ${a.currency}</div><div style="font-size:22px;font-weight:900;margin-top:10px">${money(accountBalance(a),a.currency)}</div><div class="mini-actions"><button class="ghost danger account-delete" data-id="${a.id}">Delete</button></div></div>`).join(""):'<div class="empty">No accounts.</div>';
+  $("accountsGrid").innerHTML=accounts.length?accounts.map(a=>`<div class="mini-card"><h3>${esc(a.name)}</h3><div class="small muted">${esc(a.type)} · ${a.currency}</div><div style="font-size:22px;font-weight:500;margin-top:10px">${money(accountBalance(a),a.currency)}</div><div class="mini-actions"><button class="ghost danger account-delete" data-id="${a.id}">Delete</button></div></div>`).join(""):'<div class="empty">No accounts.</div>';
 }
 function openAccount(){ $("accountForm").reset();$("accountCurrency").value="TOMAN";$("accountOpening").value=0;$("accountDialog").showModal(); }
 async function saveAccount(e){
@@ -345,8 +479,11 @@ function bind(){
   });
   $$("[data-close]").forEach(b=>b.onclick=()=>$(b.dataset.close).close());
   $("addLoanBtn").onclick=openLoanDialog;$("loanForm").onsubmit=saveLoan;
-  ["loanTotal","loanStartYear","loanStartMonth","loanCount"].forEach(id=>$(id).addEventListener("input",updateLoanCalc));
-  $("loanInstallment").addEventListener("input",()=>{$("loanInstallment").dataset.manual="1";});
+  $("loanRepaymentMode").onchange=syncLoanMode;
+  ["loanTotal","loanStartYear","loanStartMonth","loanCount","loanInstallment"].forEach(id=>$(id).addEventListener("input",updateLoanSummary));
+  ["loanStartYear","loanStartMonth","loanEndYear","loanEndMonth"].forEach(id=>$(id).addEventListener("change",()=>{if($("loanRepaymentMode").value==="manual")buildManualSchedule(true);else updateLoanSummary();}));
+  $("manualFillBtn").onclick=fillManualSchedule;
+  $("manualScheduleRows").addEventListener("input",e=>{if(e.target.classList.contains("manual-payment-input"))updateLoanSummary();});
   $("yearMap").onclick=e=>{const b=e.target.closest("[data-month]");if(!b)return;selectedMonth=Number(b.dataset.month);renderPayments();};
   $("payYear").onchange=()=>{selectedYear=Number($("payYear").value);renderPayments();};
   $("prevYearBtn").onclick=()=>{selectedYear--;renderPayments();};$("nextYearBtn").onclick=()=>{selectedYear++;renderPayments();};
