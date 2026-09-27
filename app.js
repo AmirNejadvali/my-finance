@@ -31,7 +31,8 @@ function esc(v) {
 }
 function n(v) { return Number(v || 0); }
 function money(v, currency="TOMAN") {
-  return new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(Math.round(n(v))) + " " + currency;
+  const unit = currency === "TOMAN" ? "T" : currency;
+  return new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(Math.round(n(v))) + " " + unit;
 }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function currentJalali() {
@@ -50,6 +51,35 @@ function monthKey(jy,jm){ return jy*100+jm; }
 function monthText(jy,jm){ return MONTHS[jm-1] + " " + jy; }
 function isPastMonth(jy,jm){ return monthKey(jy,jm) < monthKey(selected.jy,selected.jm); }
 function isCurrentMonth(jy,jm){ return jy===selected.jy && jm===selected.jm; }
+const PERSIAN_PARTS = new Intl.DateTimeFormat("en-US-u-ca-persian",{year:"numeric",month:"numeric",day:"numeric"});
+function jalaliParts(date) {
+  const parts=PERSIAN_PARTS.formatToParts(date);
+  const pick=t=>Number((parts.find(p=>p.type===t)||{}).value||0);
+  return {jy:pick("year"),jm:pick("month"),jd:pick("day")};
+}
+function gregorianDateForSolar(jy,jm,jd=1) {
+  const gy=jm<=9?jy+621:jy+622;
+  const gm=(jm+1)%12;
+  for(let offset=-35;offset<=35;offset++){
+    const d=new Date(gy,gm,15+offset,12,0,0,0);
+    const p=jalaliParts(d);
+    if(p.jy===jy&&p.jm===jm&&p.jd===jd)return d;
+  }
+  return null;
+}
+function solarMonthInfo(jy,jm) {
+  const first=gregorianDateForSolar(jy,jm,1);
+  if(!first)return {days:jm<=6?31:jm<=11?30:30,firstColumn:0};
+  let days=0;
+  for(let i=0;i<32;i++){
+    const d=new Date(first);d.setDate(first.getDate()+i);
+    const p=jalaliParts(d);
+    if(p.jy!==jy||p.jm!==jm)break;
+    days++;
+  }
+  return {days,firstColumn:(first.getDay()+1)%7};
+}
+
 
 async function signIn() {
   const email = $("email").value.trim();
@@ -192,13 +222,15 @@ function renderPayments() {
     return '<button class="month-card '+cls+'" data-month="'+m+'">' +
       '<div class="month-name">'+name+'</div>' +
       '<div class="month-money">'+money(t.due)+'</div>' +
-      '<div class="month-sub">'+t.rows.length+' payment'+(t.rows.length===1?"":"s")+' · '+money(t.remaining)+' remaining</div>' +
+      '<div class="month-sub">'+money(t.paid)+' paid / '+money(t.due)+' total</div>' +
+      '<div class="month-sub">'+money(t.remaining)+' remaining</div>' +
       '</button>';
   }).join("");
   renderSelectedMonth();
 }
 function renderSelectedMonth() {
   const t=paymentTotals(selectedYear,selectedMonth);
+  t.rows.sort((a,b)=>a.due_day-b.due_day || a.installment_no-b.installment_no);
   $("selectedMonthTitle").textContent=monthText(selectedYear,selectedMonth);
   $("paymentCountLabel").textContent=t.rows.length+' payment'+(t.rows.length===1?"":"s");
   $("payDue").textContent=money(t.due);
@@ -208,14 +240,37 @@ function renderSelectedMonth() {
 
   $("paymentsList").innerHTML=t.rows.length?t.rows.map(p=>{
     const loan=loans.find(l=>l.id===p.loan_id);
-    const badge=p.is_paid?'<span class="pill good">Paid</span>':isPastMonth(p.due_jyear,p.due_jmonth)?'<span class="pill bad">Overdue</span>':isCurrentMonth(p.due_jyear,p.due_jmonth)?'<span class="pill warn">Due</span>':'<span class="pill">Upcoming</span>';
+    const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">'+(isPastMonth(p.due_jyear,p.due_jmonth)?"Overdue":"Unpaid")+'</span>';
     return '<div class="row">' +
       '<div><div class="row-title">'+esc(loan?loan.name:"Loan")+'</div><div class="small muted">Installment '+p.installment_no+' · day '+p.due_day+'</div></div>' +
       '<div>'+money(p.amount)+'</div><div class="mobile-hide">'+badge+'</div>' +
       '<div class="optional small muted">'+(p.paid_at ? "Paid "+new Date(p.paid_at).toLocaleDateString("en-US-u-ca-persian") : "Not paid")+'</div>' +
       '<div><input class="pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div></div>';
   }).join(""):'<div class="empty">No loan payments in this Solar month.</div>';
+  renderSolarCalendar(selectedYear,selectedMonth,t.rows);
 }
+function renderSolarCalendar(jy,jm,rows) {
+  const info=solarMonthInfo(jy,jm);
+  $("calendarMonthTitle").textContent=monthText(jy,jm);
+  const byDay={};
+  rows.forEach(p=>{
+    const day=Math.min(Math.max(1,n(p.due_day)),info.days);
+    (byDay[day]||(byDay[day]=[])).push(p);
+  });
+  const cells=[];
+  for(let i=0;i<info.firstColumn;i++)cells.push('<div class="solar-day empty-day"></div>');
+  for(let day=1;day<=info.days;day++){
+    const events=(byDay[day]||[]).sort((a,b)=>a.installment_no-b.installment_no);
+    const todayClass=(jy===selected.jy&&jm===selected.jm&&day===selected.jd)?" today":"";
+    const chips=events.map(p=>{
+      const l=loans.find(x=>x.id===p.loan_id);
+      return '<div class="cal-event '+(p.is_paid?"paid":"unpaid")+'" title="'+esc((l?l.name:"Loan")+" · "+money(p.amount))+'"><span>'+esc(l?l.name:"Loan")+'</span><span>'+money(p.amount)+'</span></div>';
+    }).join("");
+    cells.push('<div class="solar-day'+todayClass+'"><div class="day-num">'+day+'</div>'+chips+'</div>');
+  }
+  $("solarCalendar").innerHTML=cells.join("");
+}
+
 async function togglePayment(id,checked) {
   const r=await sb.from("loan_payments").update({is_paid:checked,paid_at:checked?new Date().toISOString():null}).eq("id",id);
   if(r.error){toast(r.error.message);return;}
@@ -234,6 +289,9 @@ function renderLoans() {
     const lp=payments.filter(p=>p.loan_id===l.id);
     const paid=lp.filter(p=>p.is_paid);
     const rem=lp.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0);
+    const monthRows=lp.filter(p=>p.due_jyear===selected.jy&&p.due_jmonth===selected.jm);
+    const monthTotal=monthRows.reduce((s,p)=>s+n(p.amount),0);
+    const monthPaid=monthRows.filter(p=>p.is_paid).reduce((s,p)=>s+n(p.amount),0);
     const pct=lp.length?Math.round(paid.length*100/lp.length):0;
     const f=loanFinancials(l,lp);
     return '<div class="mini-card">' +
@@ -246,7 +304,8 @@ function renderLoans() {
       '</div>' +
       '<div class="small muted">'+monthText(l.start_jyear,l.start_jmonth)+' → '+monthText(l.end_jyear,l.end_jmonth)+' · '+lp.length+' payments</div>' +
       '<div class="progress"><span style="width:'+pct+'%"></span></div>' +
-      '<div class="small">'+paid.length+'/'+lp.length+' paid · Remaining '+money(rem)+'</div>' +
+      '<div class="small">'+paid.length+'/'+lp.length+' payments paid · Remaining '+money(rem)+'</div>' +
+      '<div class="month-card-line"><span>This month</span><span>'+money(monthPaid)+' paid / '+money(monthTotal)+' total</span></div>' +
       '<div class="mini-actions"><button class="ghost loan-edit" data-id="'+l.id+'">Edit</button><button class="ghost loan-open-map" data-id="'+l.id+'">Payments</button><button class="ghost danger loan-delete" data-id="'+l.id+'">Delete</button></div>' +
       '</div>';
   }).join(""):'<div class="empty full">No loans defined yet.</div>';
@@ -478,23 +537,26 @@ function annualSum(rows,year) {
 function renderChart() {
   if(typeof Chart==="undefined"||!$("cashflowChart"))return;
   const mode=$("chartMode").value;
-  let labels=[],payData=[],earnData=[];
+  let labels=[],paidData=[],remainingData=[],earnData=[];
   if(mode==="year"){
     const year=n($("chartYear").value)||selected.jy;
     labels=MONTHS.slice();
-    payData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1).reduce((s,p)=>s+n(p.amount),0));
+    paidData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1&&p.is_paid).reduce((s,p)=>s+n(p.amount),0));
+    remainingData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1&&!p.is_paid).reduce((s,p)=>s+n(p.amount),0));
     earnData=MONTHS.map((_,i)=>salaryMonths.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1).reduce((s,p)=>s+n(p.amount),0));
     $("chartTitle").textContent="Monthly cash-flow · "+year;
   }else{
     const start=n($("chartDecade").value)||Math.floor(selected.jy/10)*10;
     labels=Array.from({length:10},(_,i)=>String(start+i));
-    payData=labels.map(y=>annualSum(payments,Number(y)));
+    paidData=labels.map(y=>payments.filter(p=>p.due_jyear===Number(y)&&p.is_paid).reduce((s,p)=>s+n(p.amount),0));
+    remainingData=labels.map(y=>payments.filter(p=>p.due_jyear===Number(y)&&!p.is_paid).reduce((s,p)=>s+n(p.amount),0));
     earnData=labels.map(y=>annualSum(salaryMonths,Number(y)));
     $("chartTitle").textContent="Decade cash-flow · "+start+"–"+(start+9);
   }
   const datasets=[];
-  if($("chartPaymentsOn").checked)datasets.push({label:"Loan payments",data:payData,backgroundColor:"rgba(34,197,94,.68)",borderColor:"#16a34a",borderWidth:1,borderRadius:5});
-  if($("chartEarningsOn").checked)datasets.push({label:"Earnings",data:earnData,backgroundColor:"rgba(239,68,68,.62)",borderColor:"#dc2626",borderWidth:1,borderRadius:5});
+  if($("chartEarningsOn").checked)datasets.push({label:"Earnings",data:earnData,backgroundColor:"rgba(37,99,235,.68)",borderColor:"#2563eb",borderWidth:1,borderRadius:5});
+  if($("chartRemainingOn").checked)datasets.push({label:"Remaining payments",data:remainingData,backgroundColor:"rgba(239,68,68,.66)",borderColor:"#dc2626",borderWidth:1,borderRadius:5});
+  if($("chartPaidOn").checked)datasets.push({label:"Paid payments",data:paidData,backgroundColor:"rgba(34,197,94,.68)",borderColor:"#16a34a",borderWidth:1,borderRadius:5});
   if(chartInstance)chartInstance.destroy();
   chartInstance=new Chart($("cashflowChart"),{
     type:"bar",
@@ -505,7 +567,7 @@ function renderChart() {
       plugins:{legend:{labels:{usePointStyle:true,boxWidth:8,font:{weight:"normal"}}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+money(ctx.raw)}}},
       scales:{
         x:{grid:{display:false},title:{display:true,text:mode==="year"?"Solar month":"Solar year"}},
-        y:{beginAtZero:true,title:{display:true,text:"Toman"},ticks:{callback:v=>new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:1}).format(v)}}
+        y:{beginAtZero:true,title:{display:true,text:"T"},ticks:{callback:v=>new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:1}).format(v)}}
       }
     }
   });
@@ -608,7 +670,7 @@ function bind() {
     if(confirm("Delete this financial account?")){const r=await sb.from("accounts").delete().eq("id",b.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}
   };
 
-  ["chartMode","chartYear","chartDecade","chartPaymentsOn","chartEarningsOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
+  ["chartMode","chartYear","chartDecade","chartEarningsOn","chartRemainingOn","chartPaidOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
 
   $("adminUnlockBtn").onclick=unlockUserManager;
   $("adminRefreshBtn").onclick=refreshUsers;
