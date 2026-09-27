@@ -142,6 +142,7 @@ h1,h2,h3{letter-spacing:-.01em}
 .chart-wrap{height:460px;position:relative}
 .chart-note{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)}
 .chart-color{width:14px;height:8px;border-radius:3px;display:inline-block;margin-left:8px}
+.total-payment-color{background:#111827}
 .payment-color{background:#22c55e}
 .earning-color{background:#2563eb}.remaining-color{background:#ef4444}
 
