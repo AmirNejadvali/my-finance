@@ -183,7 +183,7 @@ function renderDashboard() {
   const curE = earningTotal(selected.jy,selected.jm);
   $("dashMonth").textContent = monthText(selected.jy,selected.jm);
   $("dashEarnings").textContent = money(curE);
-  $("dashPayments").textContent = money(curP.due);
+  $("dashPayments").textContent = money(curP.paid);
   $("dashRemaining").textContent = money(curP.remaining);
   $("dashNet").textContent = money(curE-curP.due);
 
