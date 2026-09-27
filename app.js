@@ -16,6 +16,7 @@ let salaryMonths = [];
 let selected = currentJalali();
 let selectedYear = selected.jy;
 let selectedMonth = selected.jm;
+let dashboardYear = selected.jy;
 let chartInstance = null;
 let adminKey = "";
 
@@ -187,7 +188,10 @@ function renderDashboard() {
   $("dashRemaining").textContent = money(curP.remaining);
   $("dashNet").textContent = money(curE-curP.due);
 
-  const year = selected.jy;
+  const years = chartYears();
+  if (!years.includes(dashboardYear)) dashboardYear = selected.jy;
+  $("dashYear").innerHTML = years.map(y=>'<option value="'+y+'" '+(y===dashboardYear?"selected":"")+'>'+y+'</option>').join("");
+  const year = dashboardYear;
   $("heatYearLabel").textContent = String(year);
   $("paymentHeatmap").innerHTML = MONTHS.map((name,i)=>{
     const m=i+1, t=paymentTotals(year,m), cls=dashboardHeatColor(t.due,t.remaining);
@@ -209,23 +213,8 @@ function renderDashboard() {
 }
 
 function renderPayments() {
-  const years = new Set();
-  for(let y=selected.jy-5;y<=selected.jy+20;y++) years.add(y);
-  payments.forEach(p=>years.add(p.due_jyear));
-  salaryMonths.forEach(s=>years.add(s.due_jyear));
-  const ys=Array.from(years).sort((a,b)=>a-b);
-  $("payYear").innerHTML = ys.map(y=>'<option value="'+y+'" '+(y===selectedYear?"selected":"")+'>'+y+'</option>').join("");
-
-  $("yearMap").innerHTML = MONTHS.map((name,i)=>{
-    const m=i+1, t=paymentTotals(selectedYear,m);
-    const cls=(m===selectedMonth?"active ":"")+(selectedYear===selected.jy&&m===selected.jm?"current":"");
-    return '<button class="month-card '+cls+'" data-month="'+m+'">' +
-      '<div class="month-name">'+name+'</div>' +
-      '<div class="month-money">'+money(t.due)+'</div>' +
-      '<div class="month-sub">'+money(t.paid)+' paid / '+money(t.due)+' total</div>' +
-      '<div class="month-sub">'+money(t.remaining)+' remaining</div>' +
-      '</button>';
-  }).join("");
+  selectedYear = selected.jy;
+  selectedMonth = selected.jm;
   renderSelectedMonth();
 }
 function renderSelectedMonth() {
@@ -537,6 +526,7 @@ function annualSum(rows,year) {
 function renderChart() {
   if(typeof Chart==="undefined"||!$("cashflowChart"))return;
   const mode=$("chartMode").value;
+  const chartType=$("chartType").value;
   let labels=[],paidData=[],remainingData=[],earnData=[];
   if(mode==="year"){
     const year=n($("chartYear").value)||selected.jy;
@@ -554,12 +544,15 @@ function renderChart() {
     $("chartTitle").textContent="Decade cash-flow · "+start+"–"+(start+9);
   }
   const datasets=[];
-  if($("chartEarningsOn").checked)datasets.push({label:"Earnings",data:earnData,backgroundColor:"rgba(37,99,235,.68)",borderColor:"#2563eb",borderWidth:1,borderRadius:5});
-  if($("chartRemainingOn").checked)datasets.push({label:"Remaining payments",data:remainingData,backgroundColor:"rgba(239,68,68,.66)",borderColor:"#dc2626",borderWidth:1,borderRadius:5});
-  if($("chartPaidOn").checked)datasets.push({label:"Paid payments",data:paidData,backgroundColor:"rgba(34,197,94,.68)",borderColor:"#16a34a",borderWidth:1,borderRadius:5});
+  const common = chartType==="line"
+    ? {fill:false,tension:.25,borderWidth:2,pointRadius:3,pointHoverRadius:5}
+    : {borderWidth:1,borderRadius:5};
+  if($("chartEarningsOn").checked)datasets.push(Object.assign({label:"Earnings",data:earnData,backgroundColor:"rgba(37,99,235,.28)",borderColor:"#2563eb"},common));
+  if($("chartRemainingOn").checked)datasets.push(Object.assign({label:"Remaining payments",data:remainingData,backgroundColor:"rgba(239,68,68,.26)",borderColor:"#dc2626"},common));
+  if($("chartPaidOn").checked)datasets.push(Object.assign({label:"Paid payments",data:paidData,backgroundColor:"rgba(34,197,94,.28)",borderColor:"#16a34a"},common));
   if(chartInstance)chartInstance.destroy();
   chartInstance=new Chart($("cashflowChart"),{
-    type:"bar",
+    type:chartType,
     data:{labels,datasets},
     options:{
       responsive:true,maintainAspectRatio:false,
@@ -629,16 +622,9 @@ function bind() {
   });
   $$("[data-close]").forEach(b=>b.onclick=()=>$(b.dataset.close).close());
 
-  $("paymentHeatmap").onclick=e=>{
-    const b=e.target.closest("[data-heat-month]");if(!b)return;
-    selectedYear=selected.jy;selectedMonth=n(b.dataset.heatMonth);document.querySelector('[data-view="payments"]').click();renderPayments();
-  };
-
-  $("yearMap").onclick=e=>{const b=e.target.closest("[data-month]");if(!b)return;selectedMonth=n(b.dataset.month);renderPayments();};
-  $("payYear").onchange=()=>{selectedYear=n($("payYear").value);renderPayments();};
-  $("prevYearBtn").onclick=()=>{selectedYear--;renderPayments();};
-  $("nextYearBtn").onclick=()=>{selectedYear++;renderPayments();};
-  $("todayMonthBtn").onclick=()=>{selectedYear=selected.jy;selectedMonth=selected.jm;renderPayments();};
+  $("dashYear").onchange=()=>{dashboardYear=n($("dashYear").value);renderDashboard();};
+  $("dashPrevYear").onclick=()=>{dashboardYear--;renderDashboard();};
+  $("dashNextYear").onclick=()=>{dashboardYear++;renderDashboard();};
   $("paymentsList").onchange=e=>{if(e.target.classList.contains("pay-toggle"))togglePayment(e.target.dataset.id,e.target.checked);};
 
   $("addLoanBtn").onclick=()=>openLoanDialog();
@@ -651,7 +637,7 @@ function bind() {
   $("loansGrid").onclick=async e=>{
     const edit=e.target.closest(".loan-edit"),map=e.target.closest(".loan-open-map"),del=e.target.closest(".loan-delete");
     if(edit)openLoanDialog(edit.dataset.id);
-    if(map){const l=loans.find(x=>x.id===map.dataset.id);if(l){selectedYear=l.start_jyear;selectedMonth=l.start_jmonth;document.querySelector('[data-view="payments"]').click();renderPayments();}}
+    if(map){document.querySelector('[data-view="payments"]').click();renderPayments();}
     if(del&&confirm("Delete this loan and all its payment schedule?")){const r=await sb.from("loans").delete().eq("id",del.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}
   };
 
@@ -670,7 +656,7 @@ function bind() {
     if(confirm("Delete this financial account?")){const r=await sb.from("accounts").delete().eq("id",b.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}
   };
 
-  ["chartMode","chartYear","chartDecade","chartEarningsOn","chartRemainingOn","chartPaidOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
+  ["chartType","chartMode","chartYear","chartDecade","chartEarningsOn","chartRemainingOn","chartPaidOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
 
   $("adminUnlockBtn").onclick=unlockUserManager;
   $("adminRefreshBtn").onclick=refreshUsers;
