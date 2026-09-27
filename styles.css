@@ -260,3 +260,14 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
   .dashboard-year-summary .metric,.current-month-summary .metric{font-size:17px}
   .dashboard-year-summary .small,.current-month-summary .small{font-size:10px}
 }
+
+.chart-date-group{display:grid;gap:5px;font-size:11px;color:var(--muted)}
+.chart-date-pair{display:grid;grid-template-columns:84px 118px;gap:6px}
+.chart-date-pair select{min-width:0;width:100%}
+@media(max-width:1050px){
+  .chart-date-pair{grid-template-columns:90px 125px}
+}
+@media(max-width:620px){
+  .chart-date-group{grid-column:span 2}
+  .chart-date-pair{grid-template-columns:1fr 1.4fr;width:100%}
+}
