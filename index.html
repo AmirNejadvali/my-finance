@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#1f2937">
   <title>My Finance</title>
-  <link rel="stylesheet" href="styles.css?v=20260927-1530">
+  <link rel="stylesheet" href="styles.css?v=20260927-1635">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -57,79 +57,60 @@
     </nav>
 
     <section id="dashboardView" class="view">
-      <div class="dashboard-title-row">
-        <div>
-          <div class="small muted">Current Solar month</div>
-          <h2 id="dashMonth">—</h2>
-        </div>
-        <div class="toolbar dashboard-year-control">
-          <button id="dashPrevYear" class="ghost" type="button">← Year</button>
-          <select id="dashYear"></select>
-          <button id="dashNextYear" class="ghost" type="button">Year →</button>
-        </div>
+      <div class="circle-strip-wrap dashboard-circle-wrap">
+        <div id="dashboardYearCircles" class="circle-strip year-circles"></div>
       </div>
 
-      <div class="grid">
-        <article class="card metric-card">
-          <div class="small muted">Planned earnings</div>
-          <div id="dashEarnings" class="metric earning-blue">0 T</div>
-        </article>
-        <article class="card metric-card">
-          <div class="small muted">Paid payments</div>
-          <div id="dashPayments" class="metric payment-green">0 T</div>
-        </article>
-        <article class="card metric-card">
-          <div class="small muted">Remaining payments</div>
-          <div id="dashRemaining" class="metric bad">0 T</div>
-        </article>
-        <article class="card metric-card">
-          <div class="small muted">Planned net</div>
-          <div id="dashNet" class="metric">0 T</div>
-        </article>
+      <div class="summary-strip dashboard-year-summary">
+        <article class="card"><div class="small muted">Total payments</div><div id="dashYearPayments" class="metric">0 T</div></article>
+        <article class="card"><div class="small muted">Total earnings</div><div id="dashYearEarnings" class="metric earning-blue">0 T</div></article>
+        <article class="card"><div class="small muted">Paid payments</div><div id="dashYearPaid" class="metric payment-green">0 T</div></article>
+      </div>
 
-        <article class="card full">
-          <div class="section-head">
-            <div>
-              <h2>Payment status map</h2>
-              <div class="small muted">Solar year <span id="heatYearLabel"></span> · red = most remaining · green = fully paid</div>
-            </div>
-            <div class="heat-legend">
-              <span class="legend-dot heat-red"></span><span>High remaining</span>
-              <span class="legend-dot heat-orange"></span><span>Medium</span>
-              <span class="legend-dot heat-yellow"></span><span>Low</span>
-              <span class="legend-dot heat-green"></span><span>Paid</span>
-            </div>
+      <article class="card" style="margin-bottom:14px">
+        <div class="section-head">
+          <div>
+            <h2>Payment status map</h2>
+            <div class="small muted">Solar year <span id="heatYearLabel"></span> · red = most remaining · green = fully paid</div>
           </div>
-          <div id="paymentHeatmap" class="payment-heatmap"></div>
-        </article>
+          <div class="heat-legend">
+            <span class="legend-dot heat-red"></span><span>High remaining</span>
+            <span class="legend-dot heat-orange"></span><span>Medium</span>
+            <span class="legend-dot heat-yellow"></span><span>Low</span>
+            <span class="legend-dot heat-green"></span><span>Paid</span>
+          </div>
+        </div>
+        <div id="paymentHeatmap" class="payment-heatmap"></div>
+      </article>
 
-        <article class="card full">
-          <h2>Upcoming unpaid payments</h2>
-          <div id="dashUpcoming" class="list"></div>
-        </article>
-      </div>
+      <article class="card">
+        <h2 id="dashClickedMonthTitle">Selected month payments</h2>
+        <div id="dashClickedMonthPayments" class="list"></div>
+      </article>
     </section>
 
     <section id="paymentsView" class="view active">
-      <div class="toolbar">
+      <div class="circle-strip-wrap month-circle-wrap">
+        <div id="monthCircles" class="circle-strip month-circles"></div>
+      </div>
+
+      <div class="toolbar selected-month-head">
         <div>
-          <div class="small muted">Current Solar month</div>
           <h2 id="selectedMonthTitle" style="margin:0"></h2>
           <div id="paymentCountLabel" class="small muted"></div>
         </div>
       </div>
 
-      <div class="summary-strip">
-        <article class="card"><div class="small muted">All payments</div><div id="payDue" class="metric">0</div></article>
+      <div class="summary-strip current-month-summary">
+        <article class="card"><div class="small muted">Total payments</div><div id="payDue" class="metric">0</div></article>
         <article class="card"><div class="small muted">Paid</div><div id="payPaid" class="metric good">0</div></article>
         <article class="card"><div class="small muted">Remaining</div><div id="payRemaining" class="metric bad">0</div></article>
-        <article class="card"><div class="small muted">All loan balance</div><div id="payOutstanding" class="metric warn">0</div></article>
       </div>
 
       <article class="card calendar-card" style="margin-bottom:14px">
         <div class="section-head">
           <div>
-            <h2 id="calendarMonthTitle">Current month calendar</h2>
+            <h2 id="calendarMonthTitle">Selected month calendar</h2>
             <div class="small muted">Green = paid · Red = unpaid</div>
           </div>
         </div>
@@ -140,7 +121,7 @@
       </article>
 
       <article class="card">
-        <h2>Current month payments by due day</h2>
+        <h2>Payments by due day</h2>
         <div id="paymentsList" class="list"></div>
       </article>
     </section>
@@ -441,13 +422,13 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js?v=20260927-1530", { updateViaCache: "none" }).catch(() => {});
+      navigator.serviceWorker.register("./sw.js?v=20260927-1635", { updateViaCache: "none" }).catch(() => {});
     }
     if ("caches" in window) {
       caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
     }
   </script>
-  <script src="config.js?v=20260927-1530"></script>
-  <script src="app.js?v=20260927-1530"></script>
+  <script src="config.js?v=20260927-1635"></script>
+  <script src="app.js?v=20260927-1635"></script>
 </body>
 </html>
