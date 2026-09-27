@@ -82,7 +82,7 @@
 
         <article class="card side">
           <h2>Current Solar month</h2>
-          <div id="currentSolarMonth" style="font-weight:900;margin-bottom:12px"></div>
+          <div id="currentSolarMonth" style="font-weight:500;margin-bottom:12px"></div>
           <div class="small muted">Loan payments due</div>
           <div id="monthLoanDue" class="metric" style="font-size:20px"></div>
           <div class="small muted" style="margin-top:10px">Remaining this month</div>
@@ -174,20 +174,27 @@
         <h2>Add loan</h2>
         <button type="button" class="icon-btn" data-close="loanDialog">×</button>
       </div>
+
       <label>Loan name
-        <input id="loanName" placeholder="Car loan, Bank loan..." required>
+        <input id="loanName" placeholder="Car loan, mortgage, bank loan..." required>
       </label>
+
       <label>Lender
         <input id="loanLender" placeholder="Bank or person">
       </label>
+
       <div class="form-row">
-        <label>Total amount (Toman)
+        <label>Original loan amount (Toman)
           <input id="loanTotal" type="number" min="1" step="1" required>
         </label>
-        <label>Installment amount (Toman)
-          <input id="loanInstallment" type="number" min="1" step="1" required>
+        <label>Repayment method
+          <select id="loanRepaymentMode">
+            <option value="equal">Equal installments</option>
+            <option value="manual">Manual monthly schedule</option>
+          </select>
         </label>
       </div>
+
       <div class="form-row">
         <label>Start Solar year
           <input id="loanStartYear" type="number" min="1300" max="1600" required>
@@ -203,21 +210,65 @@
           </select>
         </label>
       </div>
-      <div class="form-row">
-        <label>Number of payments
-          <input id="loanCount" type="number" min="1" max="600" required>
-        </label>
-        <label>Payment day of Solar month
-          <input id="loanDueDay" type="number" min="1" max="31" required>
-        </label>
+
+      <div id="equalLoanFields">
+        <div class="form-row">
+          <label>Number of payments
+            <input id="loanCount" type="number" min="1" max="600">
+          </label>
+          <label>Monthly installment (Toman)
+            <input id="loanInstallment" type="number" min="1" step="1">
+          </label>
+        </div>
       </div>
-      <div class="calc-box">
-        End month: <b id="loanEndText">—</b><br>
-        <span class="muted small">The end month is calculated from the start month and number of monthly payments. If the total is not divisible exactly, the last payment is adjusted automatically.</span>
+
+      <div id="manualLoanFields" class="hidden">
+        <div class="form-row">
+          <label>End Solar year
+            <input id="loanEndYear" type="number" min="1300" max="1600">
+          </label>
+          <label>End month
+            <select id="loanEndMonth">
+              <option value="1">Farvardin</option><option value="2">Ordibehesht</option>
+              <option value="3">Khordad</option><option value="4">Tir</option>
+              <option value="5">Mordad</option><option value="6">Shahrivar</option>
+              <option value="7">Mehr</option><option value="8">Aban</option>
+              <option value="9">Azar</option><option value="10">Dey</option>
+              <option value="11">Bahman</option><option value="12">Esfand</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="manual-fill">
+          <label>Default monthly amount (Toman)
+            <input id="manualFillAmount" type="number" min="1" step="1" placeholder="Optional">
+          </label>
+          <button id="manualFillBtn" class="ghost" type="button">Fill all months</button>
+        </div>
+
+        <div class="schedule-head">
+          <span>Monthly payment schedule</span>
+          <span><span id="manualPaymentCount">0</span> months</span>
+        </div>
+        <div id="manualScheduleRows" class="manual-schedule"></div>
       </div>
+
+      <label>Payment day of Solar month
+        <input id="loanDueDay" type="number" min="1" max="31" required>
+      </label>
+
+      <div class="calc-box loan-summary">
+        <div><span>End month</span><span id="loanEndText">—</span></div>
+        <div><span>Final payable amount</span><span id="loanFinalAmount">0 Toman</span></div>
+        <div><span>Total interest</span><span id="loanInterestAmount">0 Toman</span></div>
+        <div><span>Interest over original amount</span><span id="loanInterestRate">0.0%</span></div>
+        <div id="loanSummaryWarning" class="small bad"></div>
+      </div>
+
       <label>Notes
         <textarea id="loanNotes" class="notes" placeholder="Optional notes"></textarea>
       </label>
+
       <div class="modal-actions">
         <button class="ghost" type="button" data-close="loanDialog">Cancel</button>
         <button class="primary" type="submit">Create loan & schedule</button>
