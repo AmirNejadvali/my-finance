@@ -516,57 +516,111 @@ async function saveAccount(e) {
 
 function chartYears() {
   const set=new Set();
-  for(let y=selected.jy-10;y<=selected.jy+30;y++)set.add(y);
-  payments.forEach(x=>set.add(x.due_jyear));salaryMonths.forEach(x=>set.add(x.due_jyear));
+  const defaultStart=addJMonth(selected.jy,selected.jm,-12);
+  const defaultEnd=addJMonth(selected.jy,selected.jm,23);
+  for(let y=defaultStart.jy-5;y<=defaultEnd.jy+10;y++)set.add(y);
+  payments.forEach(x=>set.add(x.due_jyear));
+  salaryMonths.forEach(x=>set.add(x.due_jyear));
   return Array.from(set).sort((a,b)=>a-b);
 }
 function renderChartControls() {
   const years=chartYears();
-  const yearVal=n($("chartYear").value)||selected.jy;
-  $("chartYear").innerHTML=years.map(y=>'<option value="'+y+'" '+(y===yearVal?"selected":"")+'>'+y+'</option>').join("");
-  const minY=years[0]||selected.jy,maxY=years[years.length-1]||selected.jy;
-  const d0=Math.floor(minY/10)*10,d1=Math.floor(maxY/10)*10;
-  const dec=[];for(let d=d0;d<=d1;d+=10)dec.push(d);
-  const dVal=n($("chartDecade").value)||Math.floor(selected.jy/10)*10;
-  if(!dec.includes(dVal))dec.push(dVal);
-  dec.sort((a,b)=>a-b);
-  $("chartDecade").innerHTML=dec.map(d=>'<option value="'+d+'" '+(d===dVal?"selected":"")+'>'+d+'–'+(d+9)+'</option>').join("");
-  const yearMode=$("chartMode").value==="year";
-  $("chartYearWrap").classList.toggle("hidden",!yearMode);$("chartDecadeWrap").classList.toggle("hidden",yearMode);
+  if(!$("chartControls").dataset.initialized){
+    const start=addJMonth(selected.jy,selected.jm,-12);
+    const end=addJMonth(selected.jy,selected.jm,23);
+    $("chartStartYear").dataset.pending=String(start.jy);
+    $("chartStartMonth").value=String(start.jm);
+    $("chartEndYear").dataset.pending=String(end.jy);
+    $("chartEndMonth").value=String(end.jm);
+    $("chartType").value="line";
+    $("chartStep").value="month";
+    $("chartPaymentsOn").checked=true;
+    $("chartEarningsOn").checked=true;
+    $("chartRemainingOn").checked=false;
+    $("chartPaidOn").checked=false;
+    $("chartControls").dataset.initialized="1";
+  }
+
+  const fillYear=(id)=>{
+    const el=$(id);
+    const pending=n(el.dataset.pending);
+    const current=n(el.value)||pending||selected.jy;
+    el.innerHTML=years.map(y=>'<option value="'+y+'" '+(y===current?"selected":"")+'>'+y+'</option>').join("");
+    el.dataset.pending="";
+  };
+  fillYear("chartStartYear");
+  fillYear("chartEndYear");
 }
-function annualSum(rows,year) {
-  return rows.filter(x=>x.due_jyear===year).reduce((s,x)=>s+n(x.amount),0);
+function chartRange() {
+  const sy=n($("chartStartYear").value),sm=n($("chartStartMonth").value);
+  const ey=n($("chartEndYear").value),em=n($("chartEndMonth").value);
+  const count=monthSpan(sy,sm,ey,em);
+  if(count<1||count>600)return null;
+  return {sy,sm,ey,em,count};
 }
 function renderChart() {
   if(typeof Chart==="undefined"||!$("cashflowChart"))return;
-  const mode=$("chartMode").value;
+  const range=chartRange();
   const chartType=$("chartType").value;
-  let labels=[],totalData=[],paidData=[],remainingData=[],earnData=[];
-  if(mode==="year"){
-    const year=n($("chartYear").value)||selected.jy;
-    labels=MONTHS.slice();
-    totalData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1).reduce((s,p)=>s+n(p.amount),0));
-    paidData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1&&p.is_paid).reduce((s,p)=>s+n(p.amount),0));
-    remainingData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1&&!p.is_paid).reduce((s,p)=>s+n(p.amount),0));
-    earnData=MONTHS.map((_,i)=>salaryMonths.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1).reduce((s,p)=>s+n(p.amount),0));
-    $("chartTitle").textContent="Monthly cash-flow · "+year;
-  }else{
-    const start=n($("chartDecade").value)||Math.floor(selected.jy/10)*10;
-    labels=Array.from({length:10},(_,i)=>String(start+i));
-    totalData=labels.map(y=>payments.filter(p=>p.due_jyear===Number(y)).reduce((s,p)=>s+n(p.amount),0));
-    paidData=labels.map(y=>payments.filter(p=>p.due_jyear===Number(y)&&p.is_paid).reduce((s,p)=>s+n(p.amount),0));
-    remainingData=labels.map(y=>payments.filter(p=>p.due_jyear===Number(y)&&!p.is_paid).reduce((s,p)=>s+n(p.amount),0));
-    earnData=labels.map(y=>annualSum(salaryMonths,Number(y)));
-    $("chartTitle").textContent="Decade cash-flow · "+start+"–"+(start+9);
+  const step=$("chartStep").value;
+
+  if(!range){
+    $("chartTitle").textContent="Choose a valid start and end date";
+    if(chartInstance){chartInstance.destroy();chartInstance=null;}
+    return;
   }
+
+  const monthly=[];
+  for(let i=0;i<range.count;i++){
+    const d=addJMonth(range.sy,range.sm,i);
+    const monthPayments=payments.filter(p=>p.due_jyear===d.jy&&p.due_jmonth===d.jm);
+    monthly.push({
+      jy:d.jy,jm:d.jm,
+      label:MONTHS[d.jm-1]+" "+d.jy,
+      total:monthPayments.reduce((s,p)=>s+n(p.amount),0),
+      paid:monthPayments.filter(p=>p.is_paid).reduce((s,p)=>s+n(p.amount),0),
+      remaining:monthPayments.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0),
+      earnings:salaryMonths.filter(x=>x.due_jyear===d.jy&&x.due_jmonth===d.jm).reduce((s,x)=>s+n(x.amount),0)
+    });
+  }
+
+  let rows;
+  if(step==="year"){
+    const map=new Map();
+    monthly.forEach(r=>{
+      if(!map.has(r.jy))map.set(r.jy,{label:String(r.jy),total:0,paid:0,remaining:0,earnings:0});
+      const y=map.get(r.jy);
+      y.total+=r.total;y.paid+=r.paid;y.remaining+=r.remaining;y.earnings+=r.earnings;
+    });
+    rows=Array.from(map.values());
+  }else{
+    rows=monthly;
+  }
+
+  const labels=rows.map(r=>r.label);
   const datasets=[];
-  const common = chartType==="line"
+  const common=chartType==="line"
     ? {fill:false,tension:.25,borderWidth:2,pointRadius:3,pointHoverRadius:5}
     : {borderWidth:1,borderRadius:5};
-  if($("chartPaymentsOn").checked)datasets.push(Object.assign({label:"Total payments",data:totalData,backgroundColor:"rgba(17,24,39,.22)",borderColor:"#111827"},common));
-  if($("chartEarningsOn").checked)datasets.push(Object.assign({label:"Earnings",data:earnData,backgroundColor:"rgba(37,99,235,.28)",borderColor:"#2563eb"},common));
-  if($("chartRemainingOn").checked)datasets.push(Object.assign({label:"Remaining payments",data:remainingData,backgroundColor:"rgba(239,68,68,.26)",borderColor:"#dc2626"},common));
-  if($("chartPaidOn").checked)datasets.push(Object.assign({label:"Paid payments",data:paidData,backgroundColor:"rgba(34,197,94,.28)",borderColor:"#16a34a"},common));
+
+  if($("chartPaymentsOn").checked)datasets.push(Object.assign({
+    label:"Total payments",data:rows.map(r=>r.total),
+    backgroundColor:"rgba(17,24,39,.22)",borderColor:"#111827"
+  },common));
+  if($("chartEarningsOn").checked)datasets.push(Object.assign({
+    label:"Earnings",data:rows.map(r=>r.earnings),
+    backgroundColor:"rgba(37,99,235,.28)",borderColor:"#2563eb"
+  },common));
+  if($("chartRemainingOn").checked)datasets.push(Object.assign({
+    label:"Remaining payments",data:rows.map(r=>r.remaining),
+    backgroundColor:"rgba(239,68,68,.26)",borderColor:"#dc2626"
+  },common));
+  if($("chartPaidOn").checked)datasets.push(Object.assign({
+    label:"Paid payments",data:rows.map(r=>r.paid),
+    backgroundColor:"rgba(34,197,94,.28)",borderColor:"#16a34a"
+  },common));
+
+  $("chartTitle").textContent="Cash-flow · "+monthText(range.sy,range.sm)+" → "+monthText(range.ey,range.em);
   if(chartInstance)chartInstance.destroy();
   chartInstance=new Chart($("cashflowChart"),{
     type:chartType,
@@ -574,10 +628,20 @@ function renderChart() {
     options:{
       responsive:true,maintainAspectRatio:false,
       interaction:{mode:"index",intersect:false},
-      plugins:{legend:{labels:{usePointStyle:true,boxWidth:8,font:{weight:"normal"}}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+money(ctx.raw)}}},
+      plugins:{
+        legend:{labels:{usePointStyle:true,boxWidth:8,font:{weight:"normal"}}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+money(ctx.raw)}}
+      },
       scales:{
-        x:{grid:{display:false},title:{display:true,text:mode==="year"?"Solar month":"Solar year"}},
-        y:{beginAtZero:true,title:{display:true,text:"T"},ticks:{callback:v=>new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:1}).format(v)}}
+        x:{
+          grid:{display:false},
+          title:{display:true,text:step==="month"?"Solar month":"Solar year"},
+          ticks:{maxRotation:step==="month"?55:0,minRotation:0,autoSkip:true,maxTicksLimit:step==="month"?18:20}
+        },
+        y:{
+          beginAtZero:true,title:{display:true,text:"T"},
+          ticks:{callback:v=>new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:1}).format(v)}
+        }
       }
     }
   });
@@ -682,7 +746,7 @@ function bind() {
     if(confirm("Delete this financial account?")){const r=await sb.from("accounts").delete().eq("id",b.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}
   };
 
-  ["chartType","chartMode","chartYear","chartDecade","chartPaymentsOn","chartEarningsOn","chartRemainingOn","chartPaidOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
+  ["chartType","chartStartYear","chartStartMonth","chartEndYear","chartEndMonth","chartStep","chartPaymentsOn","chartEarningsOn","chartRemainingOn","chartPaidOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
 
   $("adminUnlockBtn").onclick=unlockUserManager;
   $("adminRefreshBtn").onclick=refreshUsers;
