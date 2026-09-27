@@ -541,10 +541,11 @@ function renderChart() {
   if(typeof Chart==="undefined"||!$("cashflowChart"))return;
   const mode=$("chartMode").value;
   const chartType=$("chartType").value;
-  let labels=[],paidData=[],remainingData=[],earnData=[];
+  let labels=[],totalData=[],paidData=[],remainingData=[],earnData=[];
   if(mode==="year"){
     const year=n($("chartYear").value)||selected.jy;
     labels=MONTHS.slice();
+    totalData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1).reduce((s,p)=>s+n(p.amount),0));
     paidData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1&&p.is_paid).reduce((s,p)=>s+n(p.amount),0));
     remainingData=MONTHS.map((_,i)=>payments.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1&&!p.is_paid).reduce((s,p)=>s+n(p.amount),0));
     earnData=MONTHS.map((_,i)=>salaryMonths.filter(p=>p.due_jyear===year&&p.due_jmonth===i+1).reduce((s,p)=>s+n(p.amount),0));
@@ -552,6 +553,7 @@ function renderChart() {
   }else{
     const start=n($("chartDecade").value)||Math.floor(selected.jy/10)*10;
     labels=Array.from({length:10},(_,i)=>String(start+i));
+    totalData=labels.map(y=>payments.filter(p=>p.due_jyear===Number(y)).reduce((s,p)=>s+n(p.amount),0));
     paidData=labels.map(y=>payments.filter(p=>p.due_jyear===Number(y)&&p.is_paid).reduce((s,p)=>s+n(p.amount),0));
     remainingData=labels.map(y=>payments.filter(p=>p.due_jyear===Number(y)&&!p.is_paid).reduce((s,p)=>s+n(p.amount),0));
     earnData=labels.map(y=>annualSum(salaryMonths,Number(y)));
@@ -561,6 +563,7 @@ function renderChart() {
   const common = chartType==="line"
     ? {fill:false,tension:.25,borderWidth:2,pointRadius:3,pointHoverRadius:5}
     : {borderWidth:1,borderRadius:5};
+  if($("chartPaymentsOn").checked)datasets.push(Object.assign({label:"Total payments",data:totalData,backgroundColor:"rgba(17,24,39,.22)",borderColor:"#111827"},common));
   if($("chartEarningsOn").checked)datasets.push(Object.assign({label:"Earnings",data:earnData,backgroundColor:"rgba(37,99,235,.28)",borderColor:"#2563eb"},common));
   if($("chartRemainingOn").checked)datasets.push(Object.assign({label:"Remaining payments",data:remainingData,backgroundColor:"rgba(239,68,68,.26)",borderColor:"#dc2626"},common));
   if($("chartPaidOn").checked)datasets.push(Object.assign({label:"Paid payments",data:paidData,backgroundColor:"rgba(34,197,94,.28)",borderColor:"#16a34a"},common));
@@ -679,7 +682,7 @@ function bind() {
     if(confirm("Delete this financial account?")){const r=await sb.from("accounts").delete().eq("id",b.dataset.id);if(r.error)toast(r.error.message);else await refreshAll();}
   };
 
-  ["chartType","chartMode","chartYear","chartDecade","chartEarningsOn","chartRemainingOn","chartPaidOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
+  ["chartType","chartMode","chartYear","chartDecade","chartPaymentsOn","chartEarningsOn","chartRemainingOn","chartPaidOn"].forEach(id=>$(id).addEventListener("change",()=>{renderChartControls();renderChart();}));
 
   $("adminUnlockBtn").onclick=unlockUserManager;
   $("adminRefreshBtn").onclick=refreshUsers;
