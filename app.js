@@ -58,7 +58,7 @@ function jalaliParts(date) {
   return {jy:pick("year"),jm:pick("month"),jd:pick("day")};
 }
 function gregorianDateForSolar(jy,jm,jd=1) {
-  const gy=jm<=9?jy+621:jy+622;
+  const gy=jm<=10?jy+621:jy+622;
   const gm=(jm+1)%12;
   for(let offset=-35;offset<=35;offset++){
     const d=new Date(gy,gm,15+offset,12,0,0,0);
