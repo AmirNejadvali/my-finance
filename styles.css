@@ -16,7 +16,7 @@ h1,h2,h3{letter-spacing:-.01em}
 .good{color:var(--good)}
 .bad{color:var(--bad)}
 .warn{color:var(--warn)}
-.income-red{color:#dc2626}
+.earning-blue{color:#2563eb}
 .payment-green{color:#16a34a}
 
 .primary{
@@ -143,7 +143,7 @@ h1,h2,h3{letter-spacing:-.01em}
 .chart-note{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)}
 .chart-color{width:14px;height:8px;border-radius:3px;display:inline-block;margin-left:8px}
 .payment-color{background:#22c55e}
-.earning-color{background:#ef4444}
+.earning-color{background:#2563eb}.remaining-color{background:#ef4444}
 
 dialog{
   border:0;border-radius:18px;padding:0;width:min(740px,calc(100% - 24px));max-height:92vh;
@@ -225,3 +225,7 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
   .chart-wrap{height:330px}
   .user-email{max-width:100%}
 }
+.month-card-line{display:flex;justify-content:space-between;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12px}.month-card-line span:last-child{text-align:right}
+.calendar-card{overflow:hidden}.calendar-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}.calendar-weekdays span{text-align:center;font-size:11px;color:var(--muted)}
+.solar-calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.solar-day{min-height:108px;border:1px solid var(--line);border-radius:11px;background:#fff;padding:7px;overflow:hidden}.solar-day.empty-day{background:transparent;border-color:transparent}.solar-day.today{outline:2px solid #93b4ff;background:#f8fbff}.day-num{font-size:12px;color:var(--muted);margin-bottom:5px}.cal-event{display:flex;justify-content:space-between;gap:5px;padding:5px 6px;border-radius:8px;font-size:10px;margin-top:4px;line-height:1.25}.cal-event span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cal-event span:last-child{white-space:nowrap}.cal-event.paid{background:#dcfce7;color:#166534}.cal-event.unpaid{background:#fee2e2;color:#991b1b}
+@media(max-width:760px){.solar-calendar{gap:4px}.solar-day{min-height:82px;padding:5px}.cal-event{display:block}.cal-event span{display:block}.cal-event span:last-child{margin-top:2px}.calendar-weekdays{gap:4px}}
