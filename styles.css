@@ -271,3 +271,14 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
   .chart-date-group{grid-column:span 2}
   .chart-date-pair{grid-template-columns:1fr 1.4fr;width:100%}
 }
+
+.chart-range-group{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.chart-range-group.hidden{display:none}
+.current-marker-dot{width:9px;height:9px;border-radius:50%;background:#111827;display:inline-block;margin-left:8px}
+@media(max-width:760px){
+  .chart-range-group{width:100%}
+}
+@media(max-width:620px){
+  .chart-range-group{grid-column:span 2;display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .chart-range-group.hidden{display:none}
+}
