@@ -1,127 +1,316 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#111827">
-<title>My Finance</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
-:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#111827;background:#f4f7fb;--line:#e5e7eb;--muted:#6b7280;--good:#087f5b;--bad:#c92a2a;--card:#fff}
-*{box-sizing:border-box}body{margin:0;background:#f4f7fb}button,input,select{font:inherit}.hidden{display:none!important}button{cursor:pointer}
-.primary{background:#111827;color:#fff;border:0;border-radius:11px;padding:10px 14px;font-weight:750}.ghost{background:#fff;border:1px solid var(--line);border-radius:11px;padding:10px 14px}.danger{color:var(--bad)}
-.auth{min-height:100vh;display:grid;place-items:center;padding:22px;background:linear-gradient(135deg,#fafafa,#e7ebf1)}.auth-card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:0 18px 55px #11182714}
-.brand{font-size:27px;font-weight:900;margin-bottom:5px}.muted{color:var(--muted)}.small{font-size:12px}.auth form,.form{display:grid;gap:12px}.auth label,.form label{display:grid;gap:6px;font-size:13px;font-weight:700}.auth input,.form input,.form select,.filterbar input,.filterbar select{padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:#fff}
-.auth-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.msg{min-height:20px;margin-top:10px;font-size:13px}
-.shell{max-width:1200px;margin:auto;padding:18px}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px}.top h1{margin:0;font-size:25px}.top-actions{display:flex;flex-wrap:wrap;gap:8px}
-.tabs{display:flex;gap:8px;overflow:auto;margin-bottom:14px;padding-bottom:2px}.tab{white-space:nowrap;border:1px solid var(--line);background:#fff;padding:9px 13px;border-radius:999px}.tab.active{background:#111827;color:#fff;border-color:#111827}
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}.summary{grid-column:span 3}.wide{grid-column:span 8}.side{grid-column:span 4}.full{grid-column:1/-1}.card h2{font-size:15px;margin:0 0 12px}.metric{font-size:22px;font-weight:900;line-height:1.2}.good{color:var(--good)}.bad{color:var(--bad)}
-.list{display:grid}.row{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(90px,.7fr) minmax(90px,.6fr) minmax(110px,.8fr) auto;gap:8px;align-items:center;padding:11px 0;border-top:1px solid #f0f1f3}.row:first-child{border-top:0}.pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#f3f4f6;font-size:11px}.amount{text-align:right;font-variant-numeric:tabular-nums}.empty{padding:18px 0;color:var(--muted)}
-.bar{height:8px;background:#edf0f3;border-radius:999px;overflow:hidden;margin-top:6px}.bar>i{display:block;height:100%;background:#111827}.budget-block{padding:10px 0;border-top:1px solid #f0f1f3}.budget-block:first-child{border-top:0}
-.filterbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.filterbar input{min-width:220px;flex:1}
-dialog{border:0;border-radius:18px;padding:0;box-shadow:0 30px 80px #0003;width:min(520px,calc(100% - 28px))}dialog::backdrop{background:#11182766}.modal{padding:20px}.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.modal h3{margin:0}.x{border:0;background:transparent;font-size:22px}.split{display:grid;grid-template-columns:1fr 1fr;gap:10px}.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
-.notice{background:#fff8db;border:1px solid #f4df8b;padding:10px 12px;border-radius:10px;font-size:12px;margin:0 0 12px}
-@media(max-width:900px){.summary{grid-column:span 6}.wide,.side{grid-column:1/-1}}
-@media(max-width:650px){.summary{grid-column:1/-1}.shell{padding:13px}.top{display:block}.top-actions{margin-top:12px}.row{grid-template-columns:1fr auto}.hide-mobile{display:none}.split{grid-template-columns:1fr}.auth-actions{grid-template-columns:1fr}.filterbar{display:grid}.filterbar input{min-width:0}.metric{font-size:20px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#162033">
+  <title>My Finance</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<section id="auth" class="auth">
- <div class="auth-card">
-  <div class="brand">My Finance</div>
-  <p class="muted">Private finance tracker for your phone and PC.</p>
-  <form id="loginForm">
-   <label>Email<input id="email" type="email" autocomplete="email" required></label>
-   <label>Password<input id="password" type="password" minlength="6" autocomplete="current-password" required></label>
-   <div class="auth-actions"><button class="primary">Sign in</button><button class="ghost" id="signupBtn" type="button">Create account</button></div>
-  </form>
-  <div id="authMsg" class="msg muted"></div>
-  <p class="muted small">Do not store bank passwords, PINs or CVVs in this app.</p>
- </div>
-</section>
+  <div id="toast" class="toast" aria-live="polite"></div>
 
-<main id="app" class="shell hidden">
- <div class="top">
-  <div><h1>My Finance</h1><div id="userEmail" class="muted small"></div></div>
-  <div class="top-actions"><button id="addTxBtn" class="primary">+ Transaction</button><button id="addAccountBtn" class="ghost">+ Account</button><button id="exportBtn" class="ghost">Export</button><button id="logoutBtn" class="ghost">Logout</button></div>
- </div>
- <div class="tabs">
-  <button class="tab active" data-view="dashboard">Dashboard</button><button class="tab" data-view="transactions">Transactions</button><button class="tab" data-view="accounts">Accounts</button><button class="tab" data-view="budgets">Budgets</button>
- </div>
+  <section id="authView" class="auth-shell">
+    <div class="auth-card">
+      <div class="brand">My Finance</div>
+      <p class="muted">Private personal finance tracker for phone and PC.</p>
+      <form id="authForm">
+        <label>Email
+          <input id="email" type="email" autocomplete="email" required>
+        </label>
+        <label>Password
+          <input id="password" type="password" minlength="8" autocomplete="current-password" required>
+        </label>
+        <label>Access key <span class="muted small">(only needed to create an account)</span>
+          <input id="accessKey" type="password" autocomplete="off">
+        </label>
+        <div class="auth-actions">
+          <button id="loginBtn" class="primary" type="submit">Sign in</button>
+          <button id="signupBtn" class="ghost" type="button">Create account</button>
+        </div>
+      </form>
+      <div id="authMsg" class="auth-msg muted"></div>
+      <p class="small muted">Do not store bank passwords, PINs, or CVVs in this app.</p>
+    </div>
+  </section>
 
- <section id="dashboardView">
-  <div class="grid">
-   <div class="card summary"><h2>Total balances</h2><div id="totalBalances" class="metric">—</div><div class="muted small">Grouped by currency</div></div>
-   <div class="card summary"><h2>Income this month</h2><div id="monthIncome" class="metric good">—</div></div>
-   <div class="card summary"><h2>Expenses this month</h2><div id="monthExpense" class="metric bad">—</div></div>
-   <div class="card summary"><h2>Net this month</h2><div id="monthNet" class="metric">—</div></div>
-   <div class="card wide"><h2>Recent transactions</h2><div id="recentList" class="list"></div></div>
-   <div class="card side"><h2>Budget status</h2><div id="budgetMini"></div></div>
-  </div>
- </section>
+  <main id="appView" class="shell hidden">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Personal Finance</p>
+        <h1 id="pageTitle">Dashboard</h1>
+      </div>
+      <div class="top-actions">
+        <span id="userEmail" class="small muted user-email"></span>
+        <button id="exportBtn" class="ghost">Export backup</button>
+        <button id="logoutBtn" class="ghost">Sign out</button>
+      </div>
+    </header>
 
- <section id="transactionsView" class="hidden"><div class="card"><h2>Transactions</h2><div class="filterbar"><input id="searchTx" placeholder="Search category or description"><select id="filterType"><option value="all">All types</option><option value="income">Income</option><option value="expense">Expense</option><option value="transfer">Transfer</option></select></div><div id="transactionsList" class="list"></div></div></section>
- <section id="accountsView" class="hidden"><div class="card"><h2>Accounts</h2><div id="accountsList" class="list"></div></div></section>
- <section id="budgetsView" class="hidden"><div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h2>Monthly budgets</h2><button id="addBudgetBtn" class="ghost">+ Budget</button></div><div id="budgetsList"></div></div></section>
-</main>
+    <nav class="tabs">
+      <button class="tab active" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="payments">Payments Map</button>
+      <button class="tab" data-view="loans">Loans</button>
+      <button class="tab" data-view="transactions">Transactions</button>
+      <button class="tab" data-view="accounts">Accounts</button>
+      <button class="tab" data-view="budgets">Budgets</button>
+    </nav>
 
-<dialog id="accountDialog"><div class="modal"><div class="modal-head"><h3>Add account</h3><button class="x" type="button" data-close="accountDialog">×</button></div><form id="accountForm" class="form">
-<label>Name<input id="accountName" placeholder="Main bank" required></label><div class="split"><label>Type<select id="accountType"><option value="bank">Bank</option><option value="cash">Cash</option><option value="card">Card</option><option value="savings">Savings</option><option value="investment">Investment</option></select></label><label>Currency<select id="accountCurrency"><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option><option>TOMAN</option></select></label></div><label>Opening balance<input id="accountOpening" type="number" step="0.01" value="0" required></label><div class="form-actions"><button class="ghost" type="button" data-close="accountDialog">Cancel</button><button class="primary">Save</button></div>
-</form></div></dialog>
+    <section id="dashboardView" class="view active">
+      <div class="grid">
+        <article class="card metric-card">
+          <div class="muted small">Account balances</div>
+          <div id="totalBalance" class="metric">0</div>
+        </article>
+        <article class="card metric-card">
+          <div class="muted small">Income this month</div>
+          <div id="monthIncome" class="metric good">0</div>
+        </article>
+        <article class="card metric-card">
+          <div class="muted small">Expenses this month</div>
+          <div id="monthExpense" class="metric bad">0</div>
+        </article>
+        <article class="card metric-card">
+          <div class="muted small">Loan balance outstanding</div>
+          <div id="loanOutstanding" class="metric warn">0 Toman</div>
+        </article>
 
-<dialog id="txDialog"><div class="modal"><div class="modal-head"><h3 id="txDialogTitle">Add transaction</h3><button class="x" type="button" data-close="txDialog">×</button></div><form id="txForm" class="form">
-<input id="txId" type="hidden"><div class="split"><label>Type<select id="txType"><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></select></label><label>Date<input id="txDate" type="date" required></label></div><div class="split"><label>Amount<input id="txAmount" type="number" min="0.01" step="0.01" required></label><label>Currency<select id="txCurrency"><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option><option>TOMAN</option></select></label></div><label>Account<select id="txAccount" required></select></label><label id="toAccountWrap" class="hidden">To account<select id="txToAccount"></select></label><label id="categoryWrap">Category<input id="txCategory" placeholder="Food, Salary, Transport..."></label><label>Description<input id="txDescription" maxlength="120" placeholder="Optional note"></label><div class="form-actions"><button class="ghost" type="button" data-close="txDialog">Cancel</button><button class="primary">Save</button></div>
-</form></div></dialog>
+        <article class="card wide">
+          <h2>Recent transactions</h2>
+          <div id="recentTransactions" class="list"></div>
+        </article>
 
-<dialog id="budgetDialog"><div class="modal"><div class="modal-head"><h3>Add / update budget</h3><button class="x" type="button" data-close="budgetDialog">×</button></div><form id="budgetForm" class="form">
-<label>Category<input id="budgetCategory" placeholder="Food" required></label><div class="split"><label>Monthly limit<input id="budgetAmount" type="number" min="0.01" step="0.01" required></label><label>Currency<select id="budgetCurrency"><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option><option>TOMAN</option></select></label></div><div class="form-actions"><button class="ghost" type="button" data-close="budgetDialog">Cancel</button><button class="primary">Save</button></div>
-</form></div></dialog>
+        <article class="card side">
+          <h2>Current Solar month</h2>
+          <div id="currentSolarMonth" style="font-weight:900;margin-bottom:12px"></div>
+          <div class="small muted">Loan payments due</div>
+          <div id="monthLoanDue" class="metric" style="font-size:20px"></div>
+          <div class="small muted" style="margin-top:10px">Remaining this month</div>
+          <div id="monthLoanRemaining" class="metric bad" style="font-size:20px"></div>
+        </article>
 
-<script>
-(function(){
-const URL="https://usfwtlirjkctmgbvrhzo.supabase.co";
-const KEY="sb_publishable_mEn7lnBPP3jdDzQY7CHMTw_qKSas-3C";
-const sb=supabase.createClient(URL,KEY);
-let user=null,accounts=[],transactions=[],budgets=[];
-const $=function(s){return document.querySelector(s)}, $$=function(s){return Array.from(document.querySelectorAll(s))};
-function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]})}
-function today(){return new Date().toISOString().slice(0,10)}
-function month(){return today().slice(0,7)}
-function money(n,c){n=Number(n||0);var x=new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(n);if(c==="TOMAN")return x+" Toman";if(c==="IRR")return x+" IRR";try{return new Intl.NumberFormat(undefined,{style:"currency",currency:c,maximumFractionDigits:2}).format(n)}catch(e){return x+" "+c}}
-function group(items,type){var m={};items.forEach(function(t){if(!type||t.type===type)m[t.currency]=(m[t.currency]||0)+Number(t.amount||0)});return m}
-function sumText(m){var k=Object.keys(m);return k.length?k.map(function(c){return money(m[c],c)}).join(" · "):"—"}
-function balance(a){var n=Number(a.opening_balance||0);transactions.forEach(function(t){var v=Number(t.amount||0);if(t.type==="income"&&t.account_id===a.id)n+=v;if(t.type==="expense"&&t.account_id===a.id)n-=v;if(t.type==="transfer"){if(t.account_id===a.id)n-=v;if(t.to_account_id===a.id)n+=v}});return n}
-function showAuth(){auth.classList.remove("hidden");app.classList.add("hidden")}
-async function enter(u){user=u;userEmail.textContent=u.email||"";auth.classList.add("hidden");app.classList.remove("hidden");await refresh()}
-async function refresh(){var r=await Promise.all([sb.from("accounts").select("*").order("created_at"),sb.from("transactions").select("*").order("date",{ascending:false}).order("created_at",{ascending:false}),sb.from("budgets").select("*").order("category")]);var er=r[0].error||r[1].error||r[2].error;if(er){alert(er.message);return}accounts=r[0].data||[];transactions=r[1].data||[];budgets=r[2].data||[];render();fillAccounts()}
-function render(){var bm={};accounts.forEach(function(a){bm[a.currency]=(bm[a.currency]||0)+balance(a)});totalBalances.textContent=sumText(bm);var mt=transactions.filter(function(t){return String(t.date).slice(0,7)===month()});var inc=group(mt,"income"),exp=group(mt,"expense"),net={};Object.keys(inc).concat(Object.keys(exp)).forEach(function(c){net[c]=(inc[c]||0)-(exp[c]||0)});monthIncome.textContent=sumText(inc);monthExpense.textContent=sumText(exp);monthNet.textContent=sumText(net);renderTx(recentList,transactions.slice(0,7));renderTxList();renderAccounts();renderBudgets()}
-function txHtml(t){var a=accounts.find(function(x){return x.id===t.account_id}),to=accounts.find(function(x){return x.id===t.to_account_id});var title=t.description||t.category||t.type;var sub=t.type==="transfer"?(a?a.name:"?")+" → "+(to?to.name:"?"):(a?a.name:"?");var cls=t.type==="income"?"good":t.type==="expense"?"bad":"";var pre=t.type==="income"?"+":t.type==="expense"?"-":"";return '<div class="row" data-id="'+t.id+'"><div><b>'+esc(title)+'</b><div class="muted small">'+esc(sub)+'</div></div><span class="hide-mobile">'+esc(t.date)+'</span><span class="hide-mobile pill">'+esc(t.type)+'</span><b class="amount '+cls+'">'+pre+money(t.amount,t.currency)+'</b><button class="ghost danger deltx" style="padding:5px 8px" title="Delete">×</button></div>'}
-function renderTx(el,arr){el.innerHTML=arr.length?arr.map(txHtml).join(""):'<div class="empty">No transactions yet.</div>'}
-function renderTxList(){var q=searchTx.value.trim().toLowerCase(),ty=filterType.value;var arr=transactions.filter(function(t){if(ty!=="all"&&t.type!==ty)return false;return !q||((t.category||"")+" "+(t.description||"")).toLowerCase().indexOf(q)>=0});renderTx(transactionsList,arr)}
-function renderAccounts(){accountsList.innerHTML=accounts.length?accounts.map(function(a){return '<div class="row"><div><b>'+esc(a.name)+'</b><div class="muted small">'+esc(a.type)+'</div></div><span class="hide-mobile pill">'+esc(a.currency)+'</span><span class="hide-mobile"></span><b class="amount">'+money(balance(a),a.currency)+'</b><button class="ghost danger delacc" data-id="'+a.id+'" style="padding:5px 8px">×</button></div>'}).join(""):'<div class="empty">No accounts yet. Add your first account.</div>'}
-function renderBudgets(){var mt=transactions.filter(function(t){return t.type==="expense"&&String(t.date).slice(0,7)===month()});var h=budgets.map(function(b){var spent=mt.filter(function(t){return (t.category||"").toLowerCase()===b.category.toLowerCase()&&t.currency===b.currency}).reduce(function(s,t){return s+Number(t.amount)},0);var pct=Math.min(100,Math.round(spent/Number(b.amount)*100));return '<div class="budget-block"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+esc(b.category)+'</b><span>'+money(spent,b.currency)+' / '+money(b.amount,b.currency)+' <button class="ghost danger delbudget" data-id="'+b.id+'" style="padding:3px 7px">×</button></span></div><div class="bar"><i style="width:'+pct+'%"></i></div></div>'}).join("");budgetsList.innerHTML=h||'<div class="empty">No budgets yet.</div>';budgetMini.innerHTML=h||'<div class="empty">No budgets set.</div>'}
-function fillAccounts(){var o=accounts.map(function(a){return '<option value="'+a.id+'">'+esc(a.name)+' ('+esc(a.currency)+')</option>'}).join("");txAccount.innerHTML=o;txToAccount.innerHTML=o}
-function openTx(t){if(!accounts.length){alert("Add an account first.");return}txForm.reset();txId.value=t?t.id:"";txDialogTitle.textContent=t?"Edit transaction":"Add transaction";txDate.value=t?t.date:today();txType.value=t?t.type:"expense";txAmount.value=t?t.amount:"";txCurrency.value=t?t.currency:(accounts[0]?accounts[0].currency:"AZN");txAccount.value=t?t.account_id:accounts[0].id;txToAccount.value=t&&t.to_account_id?t.to_account_id:(accounts[1]?accounts[1].id:accounts[0].id);txCategory.value=t&&t.category?t.category:"";txDescription.value=t&&t.description?t.description:"";typeChanged();txDialog.showModal()}
-function typeChanged(){var tr=txType.value==="transfer";toAccountWrap.classList.toggle("hidden",!tr);categoryWrap.classList.toggle("hidden",tr)}
-loginForm.addEventListener("submit",async function(e){e.preventDefault();authMsg.textContent="Signing in...";var r=await sb.auth.signInWithPassword({email:email.value.trim(),password:password.value});authMsg.textContent=r.error?r.error.message:"";if(r.data&&r.data.user)await enter(r.data.user)})
-signupBtn.onclick=async function(){authMsg.textContent="Creating account...";var r=await sb.auth.signUp({email:email.value.trim(),password:password.value});if(r.error){authMsg.textContent=r.error.message;return}if(r.data.session){authMsg.textContent="";await enter(r.data.user)}else authMsg.textContent="Account created. Confirm the email if Supabase asks you to, then sign in."}
-logoutBtn.onclick=async function(){await sb.auth.signOut();user=null;showAuth()}
-addAccountBtn.onclick=function(){accountForm.reset();accountCurrency.value="AZN";accountOpening.value="0";accountDialog.showModal()}
-addTxBtn.onclick=function(){openTx(null)}
-addBudgetBtn.onclick=function(){budgetForm.reset();budgetCurrency.value="AZN";budgetDialog.showModal()}
-$$("[data-close]").forEach(function(b){b.onclick=function(){document.getElementById(b.dataset.close).close()}})
-txType.onchange=typeChanged;searchTx.oninput=renderTxList;filterType.onchange=renderTxList
-accountForm.onsubmit=async function(e){e.preventDefault();var row={user_id:user.id,name:accountName.value.trim(),type:accountType.value,currency:accountCurrency.value,opening_balance:Number(accountOpening.value||0)};var r=await sb.from("accounts").insert(row);if(r.error){alert(r.error.message);return}accountDialog.close();await refresh()}
-txForm.onsubmit=async function(e){e.preventDefault();var tr=txType.value==="transfer";if(tr&&txAccount.value===txToAccount.value){alert("Choose two different accounts.");return}var row={user_id:user.id,type:txType.value,date:txDate.value,amount:Number(txAmount.value),currency:txCurrency.value,account_id:txAccount.value,to_account_id:tr?txToAccount.value:null,category:tr?null:(txCategory.value.trim()||"Other"),description:txDescription.value.trim()||null};var q=txId.value?sb.from("transactions").update(row).eq("id",txId.value):sb.from("transactions").insert(row);var r=await q;if(r.error){alert(r.error.message);return}txDialog.close();await refresh()}
-budgetForm.onsubmit=async function(e){e.preventDefault();var row={user_id:user.id,category:budgetCategory.value.trim(),amount:Number(budgetAmount.value),currency:budgetCurrency.value};var r=await sb.from("budgets").upsert(row,{onConflict:"user_id,category,currency"});if(r.error){alert(r.error.message);return}budgetDialog.close();await refresh()}
-transactionsList.onclick=recentList.onclick=async function(e){var row=e.target.closest("[data-id]");if(!row)return;var t=transactions.find(function(x){return x.id===row.dataset.id});if(e.target.classList.contains("deltx")){if(confirm("Delete this transaction?")){var r=await sb.from("transactions").delete().eq("id",row.dataset.id);if(r.error)alert(r.error.message);else await refresh()}}else openTx(t)}
-accountsList.onclick=async function(e){var b=e.target.closest(".delacc");if(!b)return;var id=b.dataset.id;if(transactions.some(function(t){return t.account_id===id||t.to_account_id===id})){alert("Delete related transactions first.");return}if(confirm("Delete this account?")){var r=await sb.from("accounts").delete().eq("id",id);if(r.error)alert(r.error.message);else await refresh()}}
-budgetsList.onclick=async function(e){var b=e.target.closest(".delbudget");if(!b)return;if(confirm("Delete this budget?")){var r=await sb.from("budgets").delete().eq("id",b.dataset.id);if(r.error)alert(r.error.message);else await refresh()}}
-exportBtn.onclick=function(){var blob=new Blob([JSON.stringify({exported_at:new Date().toISOString(),accounts:accounts,transactions:transactions,budgets:budgets},null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="my-finance-backup-"+today()+".json";a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},1000)}
-$$(".tab").forEach(function(b){b.onclick=function(){$$(".tab").forEach(function(x){x.classList.remove("active")});b.classList.add("active");["dashboard","transactions","accounts","budgets"].forEach(function(v){document.getElementById(v+"View").classList.toggle("hidden",v!==b.dataset.view)})}})
-sb.auth.onAuthStateChange(function(ev,s){if(ev==="SIGNED_OUT")showAuth();else if(s&&(!user||user.id!==s.user.id))enter(s.user)})
-sb.auth.getSession().then(function(r){if(r.data.session)enter(r.data.session.user);else showAuth()})
-})();
-</script>
+        <article class="card full">
+          <h2>Next unpaid loan payments</h2>
+          <div id="nextPayments" class="list"></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="paymentsView" class="view">
+      <div class="toolbar">
+        <button id="prevYearBtn" class="ghost">← Year</button>
+        <select id="payYear"></select>
+        <button id="nextYearBtn" class="ghost">Year →</button>
+        <button id="todayMonthBtn" class="ghost">Current month</button>
+      </div>
+
+      <article class="card" style="margin-bottom:14px">
+        <h2>Solar year payment map</h2>
+        <div id="yearMap" class="year-map"></div>
+      </article>
+
+      <div class="toolbar">
+        <div>
+          <h2 id="selectedMonthTitle" style="margin:0"></h2>
+          <div id="paymentCountLabel" class="small muted"></div>
+        </div>
+      </div>
+
+      <div class="summary-strip">
+        <article class="card"><div class="small muted">All payments</div><div id="payDue" class="metric">0</div></article>
+        <article class="card"><div class="small muted">Paid</div><div id="payPaid" class="metric good">0</div></article>
+        <article class="card"><div class="small muted">Remaining</div><div id="payRemaining" class="metric bad">0</div></article>
+        <article class="card"><div class="small muted">All loan balance</div><div id="payOutstanding" class="metric warn">0</div></article>
+      </div>
+
+      <article class="card">
+        <h2>Payments in selected month</h2>
+        <div id="paymentsList" class="list"></div>
+      </article>
+    </section>
+
+    <section id="loansView" class="view">
+      <div class="toolbar">
+        <button id="addLoanBtn" class="primary">+ Add loan</button>
+      </div>
+      <div id="loansGrid" class="cards"></div>
+    </section>
+
+    <section id="transactionsView" class="view">
+      <div class="toolbar">
+        <button id="addTxBtn" class="primary">+ Add transaction</button>
+        <div class="spacer"></div>
+        <input id="txSearch" placeholder="Search category or description">
+        <select id="txFilter">
+          <option value="all">All types</option>
+          <option value="income">Income</option>
+          <option value="expense">Expense</option>
+          <option value="transfer">Transfer</option>
+        </select>
+      </div>
+      <article class="card">
+        <div id="transactionsList" class="list"></div>
+      </article>
+    </section>
+
+    <section id="accountsView" class="view">
+      <div class="toolbar">
+        <button id="addAccountBtn" class="primary">+ Add account</button>
+      </div>
+      <div id="accountsGrid" class="cards"></div>
+    </section>
+
+    <section id="budgetsView" class="view">
+      <div class="toolbar">
+        <button id="addBudgetBtn" class="primary">+ Add budget</button>
+      </div>
+      <div id="budgetsGrid" class="cards"></div>
+    </section>
+  </main>
+
+  <dialog id="loanDialog">
+    <form id="loanForm" class="modal-form">
+      <div class="modal-head">
+        <h2>Add loan</h2>
+        <button type="button" class="icon-btn" data-close="loanDialog">×</button>
+      </div>
+      <label>Loan name
+        <input id="loanName" placeholder="Car loan, Bank loan..." required>
+      </label>
+      <label>Lender
+        <input id="loanLender" placeholder="Bank or person">
+      </label>
+      <div class="form-row">
+        <label>Total amount (Toman)
+          <input id="loanTotal" type="number" min="1" step="1" required>
+        </label>
+        <label>Installment amount (Toman)
+          <input id="loanInstallment" type="number" min="1" step="1" required>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Start Solar year
+          <input id="loanStartYear" type="number" min="1300" max="1600" required>
+        </label>
+        <label>Start month
+          <select id="loanStartMonth">
+            <option value="1">Farvardin</option><option value="2">Ordibehesht</option>
+            <option value="3">Khordad</option><option value="4">Tir</option>
+            <option value="5">Mordad</option><option value="6">Shahrivar</option>
+            <option value="7">Mehr</option><option value="8">Aban</option>
+            <option value="9">Azar</option><option value="10">Dey</option>
+            <option value="11">Bahman</option><option value="12">Esfand</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Number of payments
+          <input id="loanCount" type="number" min="1" max="600" required>
+        </label>
+        <label>Payment day of Solar month
+          <input id="loanDueDay" type="number" min="1" max="31" required>
+        </label>
+      </div>
+      <div class="calc-box">
+        End month: <b id="loanEndText">—</b><br>
+        <span class="muted small">The end month is calculated from the start month and number of monthly payments. If the total is not divisible exactly, the last payment is adjusted automatically.</span>
+      </div>
+      <label>Notes
+        <textarea id="loanNotes" class="notes" placeholder="Optional notes"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button class="ghost" type="button" data-close="loanDialog">Cancel</button>
+        <button class="primary" type="submit">Create loan & schedule</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="accountDialog">
+    <form id="accountForm" class="modal-form">
+      <div class="modal-head">
+        <h2>Add account</h2>
+        <button type="button" class="icon-btn" data-close="accountDialog">×</button>
+      </div>
+      <label>Name<input id="accountName" placeholder="Main bank" required></label>
+      <div class="form-row">
+        <label>Type
+          <select id="accountType">
+            <option value="bank">Bank</option><option value="cash">Cash</option>
+            <option value="card">Card</option><option value="savings">Savings</option>
+            <option value="investment">Investment</option>
+          </select>
+        </label>
+        <label>Currency
+          <select id="accountCurrency">
+            <option>TOMAN</option><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option>
+          </select>
+        </label>
+      </div>
+      <label>Opening balance<input id="accountOpening" type="number" step="0.01" value="0"></label>
+      <div class="modal-actions">
+        <button class="ghost" type="button" data-close="accountDialog">Cancel</button>
+        <button class="primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="txDialog">
+    <form id="txForm" class="modal-form">
+      <div class="modal-head">
+        <h2>Add transaction</h2>
+        <button type="button" class="icon-btn" data-close="txDialog">×</button>
+      </div>
+      <div class="form-row">
+        <label>Type
+          <select id="txType">
+            <option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option>
+          </select>
+        </label>
+        <label>Date<input id="txDate" type="date" required></label>
+      </div>
+      <div class="form-row">
+        <label>Amount<input id="txAmount" type="number" min="0.01" step="0.01" required></label>
+        <label>Currency
+          <select id="txCurrency">
+            <option>TOMAN</option><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option>
+          </select>
+        </label>
+      </div>
+      <label>Account<select id="txAccount" required></select></label>
+      <label id="txToWrap" class="hidden">To account<select id="txToAccount"></select></label>
+      <label id="txCategoryWrap">Category<input id="txCategory" placeholder="Food, Salary, Transport..."></label>
+      <label>Description<input id="txDescription" maxlength="120" placeholder="Optional note"></label>
+      <div class="modal-actions">
+        <button class="ghost" type="button" data-close="txDialog">Cancel</button>
+        <button class="primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="budgetDialog">
+    <form id="budgetForm" class="modal-form">
+      <div class="modal-head">
+        <h2>Add / update budget</h2>
+        <button type="button" class="icon-btn" data-close="budgetDialog">×</button>
+      </div>
+      <label>Category<input id="budgetCategory" placeholder="Food" required></label>
+      <div class="form-row">
+        <label>Monthly limit<input id="budgetAmount" type="number" min="0.01" step="0.01" required></label>
+        <label>Currency
+          <select id="budgetCurrency">
+            <option>TOMAN</option><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost" type="button" data-close="budgetDialog">Cancel</button>
+        <button class="primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
