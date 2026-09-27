@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#162033">
+  <meta name="theme-color" content="#1f2937">
   <title>My Finance</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -13,7 +13,7 @@
   <section id="authView" class="auth-shell">
     <div class="auth-card">
       <div class="brand">My Finance</div>
-      <p class="muted">Private personal finance tracker for phone and PC.</p>
+      <p class="muted">Private finance planning for loans, salaries and future cash flow.</p>
       <form id="authForm">
         <label>Email
           <input id="email" type="email" autocomplete="email" required>
@@ -21,16 +21,15 @@
         <label>Password
           <input id="password" type="password" minlength="8" autocomplete="current-password" required>
         </label>
-        <label>Access key <span class="muted small">(only needed to create an account)</span>
+        <label>Access key <span class="muted small">(only for creating an account)</span>
           <input id="accessKey" type="password" autocomplete="off">
         </label>
         <div class="auth-actions">
-          <button id="loginBtn" class="primary" type="submit">Sign in</button>
+          <button class="primary" type="submit">Sign in</button>
           <button id="signupBtn" class="ghost" type="button">Create account</button>
         </div>
       </form>
       <div id="authMsg" class="auth-msg muted"></div>
-      <p class="small muted">Do not store bank passwords, PINs, or CVVs in this app.</p>
     </div>
   </section>
 
@@ -42,6 +41,7 @@
       </div>
       <div class="top-actions">
         <span id="userEmail" class="small muted user-email"></span>
+        <button id="manageUsersBtn" class="ghost">User Access</button>
         <button id="exportBtn" class="ghost">Export backup</button>
         <button id="logoutBtn" class="ghost">Sign out</button>
       </div>
@@ -51,47 +51,56 @@
       <button class="tab active" data-view="dashboard">Dashboard</button>
       <button class="tab" data-view="payments">Payments Map</button>
       <button class="tab" data-view="loans">Loans</button>
-      <button class="tab" data-view="transactions">Transactions</button>
+      <button class="tab" data-view="salaries">Salary Definitions</button>
+      <button class="tab" data-view="charts">Charts</button>
       <button class="tab" data-view="accounts">Accounts</button>
-      <button class="tab" data-view="budgets">Budgets</button>
     </nav>
 
     <section id="dashboardView" class="view active">
+      <div class="dashboard-title-row">
+        <div>
+          <div class="small muted">Current Solar month</div>
+          <h2 id="dashMonth">—</h2>
+        </div>
+      </div>
+
       <div class="grid">
         <article class="card metric-card">
-          <div class="muted small">Account balances</div>
-          <div id="totalBalance" class="metric">0</div>
+          <div class="small muted">Planned earnings</div>
+          <div id="dashEarnings" class="metric income-red">0 Toman</div>
         </article>
         <article class="card metric-card">
-          <div class="muted small">Income this month</div>
-          <div id="monthIncome" class="metric good">0</div>
+          <div class="small muted">Loan payments</div>
+          <div id="dashPayments" class="metric payment-green">0 Toman</div>
         </article>
         <article class="card metric-card">
-          <div class="muted small">Expenses this month</div>
-          <div id="monthExpense" class="metric bad">0</div>
+          <div class="small muted">Remaining payments</div>
+          <div id="dashRemaining" class="metric bad">0 Toman</div>
         </article>
         <article class="card metric-card">
-          <div class="muted small">Loan balance outstanding</div>
-          <div id="loanOutstanding" class="metric warn">0 Toman</div>
-        </article>
-
-        <article class="card wide">
-          <h2>Recent transactions</h2>
-          <div id="recentTransactions" class="list"></div>
-        </article>
-
-        <article class="card side">
-          <h2>Current Solar month</h2>
-          <div id="currentSolarMonth" style="font-weight:500;margin-bottom:12px"></div>
-          <div class="small muted">Loan payments due</div>
-          <div id="monthLoanDue" class="metric" style="font-size:20px"></div>
-          <div class="small muted" style="margin-top:10px">Remaining this month</div>
-          <div id="monthLoanRemaining" class="metric bad" style="font-size:20px"></div>
+          <div class="small muted">Planned net</div>
+          <div id="dashNet" class="metric">0 Toman</div>
         </article>
 
         <article class="card full">
-          <h2>Next unpaid loan payments</h2>
-          <div id="nextPayments" class="list"></div>
+          <div class="section-head">
+            <div>
+              <h2>Payment status map</h2>
+              <div class="small muted">Solar year <span id="heatYearLabel"></span> · red = most remaining · green = fully paid</div>
+            </div>
+            <div class="heat-legend">
+              <span class="legend-dot heat-red"></span><span>High remaining</span>
+              <span class="legend-dot heat-orange"></span><span>Medium</span>
+              <span class="legend-dot heat-yellow"></span><span>Low</span>
+              <span class="legend-dot heat-green"></span><span>Paid</span>
+            </div>
+          </div>
+          <div id="paymentHeatmap" class="payment-heatmap"></div>
+        </article>
+
+        <article class="card full">
+          <h2>Upcoming unpaid payments</h2>
+          <div id="dashUpcoming" class="list"></div>
         </article>
       </div>
     </section>
@@ -136,49 +145,62 @@
       <div id="loansGrid" class="cards"></div>
     </section>
 
-    <section id="transactionsView" class="view">
+    <section id="salariesView" class="view">
       <div class="toolbar">
-        <button id="addTxBtn" class="primary">+ Add transaction</button>
-        <div class="spacer"></div>
-        <input id="txSearch" placeholder="Search category or description">
-        <select id="txFilter">
-          <option value="all">All types</option>
-          <option value="income">Income</option>
-          <option value="expense">Expense</option>
-          <option value="transfer">Transfer</option>
-        </select>
+        <button id="addSalaryBtn" class="primary">+ Add salary definition</button>
+        <span class="small muted">Use one definition for you, your wife, or any other income source.</span>
       </div>
-      <article class="card">
-        <div id="transactionsList" class="list"></div>
+      <div id="salaryGrid" class="cards"></div>
+    </section>
+
+    <section id="chartsView" class="view">
+      <article class="card chart-card">
+        <div class="chart-toolbar">
+          <div>
+            <h2 id="chartTitle">Cash-flow chart</h2>
+            <div class="small muted">Y axis: Toman · X axis: Solar months or years</div>
+          </div>
+          <div class="chart-controls">
+            <label>View
+              <select id="chartMode">
+                <option value="year">Year</option>
+                <option value="decade">Decade</option>
+              </select>
+            </label>
+            <label id="chartYearWrap">Year
+              <select id="chartYear"></select>
+            </label>
+            <label id="chartDecadeWrap" class="hidden">Decade
+              <select id="chartDecade"></select>
+            </label>
+            <label class="toggle-label"><input id="chartPaymentsOn" type="checkbox" checked> Loan payments</label>
+            <label class="toggle-label"><input id="chartEarningsOn" type="checkbox" checked> Earnings</label>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="cashflowChart"></canvas></div>
+        <div class="chart-note"><span class="chart-color payment-color"></span> Loan payments are green <span class="chart-color earning-color"></span> Earnings are red</div>
       </article>
     </section>
 
     <section id="accountsView" class="view">
       <div class="toolbar">
-        <button id="addAccountBtn" class="primary">+ Add account</button>
+        <button id="addAccountBtn" class="primary">+ Add financial account</button>
       </div>
       <div id="accountsGrid" class="cards"></div>
-    </section>
-
-    <section id="budgetsView" class="view">
-      <div class="toolbar">
-        <button id="addBudgetBtn" class="primary">+ Add budget</button>
-      </div>
-      <div id="budgetsGrid" class="cards"></div>
     </section>
   </main>
 
   <dialog id="loanDialog">
     <form id="loanForm" class="modal-form">
+      <input id="loanId" type="hidden">
       <div class="modal-head">
-        <h2>Add loan</h2>
+        <h2 id="loanModalTitle">Add loan</h2>
         <button type="button" class="icon-btn" data-close="loanDialog">×</button>
       </div>
 
       <label>Loan name
         <input id="loanName" placeholder="Car loan, mortgage, bank loan..." required>
       </label>
-
       <label>Lender
         <input id="loanLender" placeholder="Bank or person">
       </label>
@@ -201,12 +223,9 @@
         </label>
         <label>Start month
           <select id="loanStartMonth">
-            <option value="1">Farvardin</option><option value="2">Ordibehesht</option>
-            <option value="3">Khordad</option><option value="4">Tir</option>
-            <option value="5">Mordad</option><option value="6">Shahrivar</option>
-            <option value="7">Mehr</option><option value="8">Aban</option>
-            <option value="9">Azar</option><option value="10">Dey</option>
-            <option value="11">Bahman</option><option value="12">Esfand</option>
+            <option value="1">Farvardin</option><option value="2">Ordibehesht</option><option value="3">Khordad</option><option value="4">Tir</option>
+            <option value="5">Mordad</option><option value="6">Shahrivar</option><option value="7">Mehr</option><option value="8">Aban</option>
+            <option value="9">Azar</option><option value="10">Dey</option><option value="11">Bahman</option><option value="12">Esfand</option>
           </select>
         </label>
       </div>
@@ -229,12 +248,9 @@
           </label>
           <label>End month
             <select id="loanEndMonth">
-              <option value="1">Farvardin</option><option value="2">Ordibehesht</option>
-              <option value="3">Khordad</option><option value="4">Tir</option>
-              <option value="5">Mordad</option><option value="6">Shahrivar</option>
-              <option value="7">Mehr</option><option value="8">Aban</option>
-              <option value="9">Azar</option><option value="10">Dey</option>
-              <option value="11">Bahman</option><option value="12">Esfand</option>
+              <option value="1">Farvardin</option><option value="2">Ordibehesht</option><option value="3">Khordad</option><option value="4">Tir</option>
+              <option value="5">Mordad</option><option value="6">Shahrivar</option><option value="7">Mehr</option><option value="8">Aban</option>
+              <option value="9">Azar</option><option value="10">Dey</option><option value="11">Bahman</option><option value="12">Esfand</option>
             </select>
           </label>
         </div>
@@ -271,7 +287,82 @@
 
       <div class="modal-actions">
         <button class="ghost" type="button" data-close="loanDialog">Cancel</button>
-        <button class="primary" type="submit">Create loan & schedule</button>
+        <button class="primary" type="submit">Save loan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="salaryDialog">
+    <form id="salaryForm" class="modal-form">
+      <input id="salaryId" type="hidden">
+      <div class="modal-head">
+        <h2 id="salaryModalTitle">Add salary definition</h2>
+        <button type="button" class="icon-btn" data-close="salaryDialog">×</button>
+      </div>
+
+      <div class="form-row">
+        <label>Person / source
+          <input id="salaryPerson" placeholder="Me, Wife, Consulting..." required>
+        </label>
+        <label>Income title
+          <input id="salaryTitle" placeholder="Salary">
+        </label>
+      </div>
+
+      <div class="form-row">
+        <label>Starting monthly amount (Toman)
+          <input id="salaryAmount" type="number" min="1" step="1" required>
+        </label>
+        <label>Annual growth estimate (%)
+          <input id="salaryGrowth" type="number" min="0" max="1000" step="0.1" value="0">
+        </label>
+      </div>
+
+      <div class="form-row">
+        <label>Start Solar year
+          <input id="salaryStartYear" type="number" min="1300" max="1600" required>
+        </label>
+        <label>Start month
+          <select id="salaryStartMonth">
+            <option value="1">Farvardin</option><option value="2">Ordibehesht</option><option value="3">Khordad</option><option value="4">Tir</option>
+            <option value="5">Mordad</option><option value="6">Shahrivar</option><option value="7">Mehr</option><option value="8">Aban</option>
+            <option value="9">Azar</option><option value="10">Dey</option><option value="11">Bahman</option><option value="12">Esfand</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="form-row">
+        <label>End Solar year
+          <input id="salaryEndYear" type="number" min="1300" max="1600" required>
+        </label>
+        <label>End month
+          <select id="salaryEndMonth">
+            <option value="1">Farvardin</option><option value="2">Ordibehesht</option><option value="3">Khordad</option><option value="4">Tir</option>
+            <option value="5">Mordad</option><option value="6">Shahrivar</option><option value="7">Mehr</option><option value="8">Aban</option>
+            <option value="9">Azar</option><option value="10">Dey</option><option value="11">Bahman</option><option value="12">Esfand</option>
+          </select>
+        </label>
+      </div>
+
+      <label>Pay day of Solar month
+        <input id="salaryPayDay" type="number" min="1" max="31" value="1">
+      </label>
+
+      <div class="calc-box salary-summary">
+        <div><span>Forecast months</span><span id="salaryMonthsCount">0</span></div>
+        <div><span>First monthly amount</span><span id="salaryFirstAmount">0 Toman</span></div>
+        <div><span>Last monthly amount</span><span id="salaryLastAmount">0 Toman</span></div>
+        <div><span>Total forecast earnings</span><span id="salaryForecastTotal">0 Toman</span></div>
+        <div id="salarySummaryWarning" class="small bad"></div>
+      </div>
+
+      <label>Notes
+        <textarea id="salaryNotes" class="notes" placeholder="Optional notes"></textarea>
+      </label>
+
+      <div class="modal-actions">
+        <button class="ghost" type="button" data-close="salaryDialog">Cancel</button>
+        <button class="primary" type="submit">Save salary definition</button>
       </div>
     </form>
   </dialog>
@@ -279,16 +370,14 @@
   <dialog id="accountDialog">
     <form id="accountForm" class="modal-form">
       <div class="modal-head">
-        <h2>Add account</h2>
+        <h2>Add financial account</h2>
         <button type="button" class="icon-btn" data-close="accountDialog">×</button>
       </div>
       <label>Name<input id="accountName" placeholder="Main bank" required></label>
       <div class="form-row">
         <label>Type
           <select id="accountType">
-            <option value="bank">Bank</option><option value="cash">Cash</option>
-            <option value="card">Card</option><option value="savings">Savings</option>
-            <option value="investment">Investment</option>
+            <option value="bank">Bank</option><option value="cash">Cash</option><option value="card">Card</option><option value="savings">Savings</option><option value="investment">Investment</option>
           </select>
         </label>
         <label>Currency
@@ -297,7 +386,7 @@
           </select>
         </label>
       </div>
-      <label>Opening balance<input id="accountOpening" type="number" step="0.01" value="0"></label>
+      <label>Balance<input id="accountOpening" type="number" step="0.01" value="0"></label>
       <div class="modal-actions">
         <button class="ghost" type="button" data-close="accountDialog">Cancel</button>
         <button class="primary" type="submit">Save</button>
@@ -305,62 +394,37 @@
     </form>
   </dialog>
 
-  <dialog id="txDialog">
-    <form id="txForm" class="modal-form">
+  <dialog id="usersDialog">
+    <div class="modal-form">
       <div class="modal-head">
-        <h2>Add transaction</h2>
-        <button type="button" class="icon-btn" data-close="txDialog">×</button>
+        <h2>User Access</h2>
+        <button type="button" class="icon-btn" data-close="usersDialog">×</button>
       </div>
-      <div class="form-row">
-        <label>Type
-          <select id="txType">
-            <option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option>
-          </select>
-        </label>
-        <label>Date<input id="txDate" type="date" required></label>
-      </div>
-      <div class="form-row">
-        <label>Amount<input id="txAmount" type="number" min="0.01" step="0.01" required></label>
-        <label>Currency
-          <select id="txCurrency">
-            <option>TOMAN</option><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option>
-          </select>
-        </label>
-      </div>
-      <label>Account<select id="txAccount" required></select></label>
-      <label id="txToWrap" class="hidden">To account<select id="txToAccount"></select></label>
-      <label id="txCategoryWrap">Category<input id="txCategory" placeholder="Food, Salary, Transport..."></label>
-      <label>Description<input id="txDescription" maxlength="120" placeholder="Optional note"></label>
-      <div class="modal-actions">
-        <button class="ghost" type="button" data-close="txDialog">Cancel</button>
-        <button class="primary" type="submit">Save</button>
-      </div>
-    </form>
-  </dialog>
 
-  <dialog id="budgetDialog">
-    <form id="budgetForm" class="modal-form">
-      <div class="modal-head">
-        <h2>Add / update budget</h2>
-        <button type="button" class="icon-btn" data-close="budgetDialog">×</button>
-      </div>
-      <label>Category<input id="budgetCategory" placeholder="Food" required></label>
-      <div class="form-row">
-        <label>Monthly limit<input id="budgetAmount" type="number" min="0.01" step="0.01" required></label>
-        <label>Currency
-          <select id="budgetCurrency">
-            <option>TOMAN</option><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option>
-          </select>
+      <div id="adminLocked">
+        <p class="muted small">Managing user accounts requires your pass key. The key is checked server-side and is not stored in the browser.</p>
+        <label>Pass key
+          <input id="adminPassKey" type="password" autocomplete="off">
         </label>
+        <div class="modal-actions">
+          <button id="adminUnlockBtn" class="primary" type="button">Unlock user management</button>
+        </div>
+        <div id="adminMsg" class="small bad"></div>
       </div>
-      <div class="modal-actions">
-        <button class="ghost" type="button" data-close="budgetDialog">Cancel</button>
-        <button class="primary" type="submit">Save</button>
+
+      <div id="adminUnlocked" class="hidden">
+        <div class="toolbar">
+          <span class="small muted">Approve or revoke access to this finance app.</span>
+          <div class="spacer"></div>
+          <button id="adminRefreshBtn" class="ghost" type="button">Refresh</button>
+        </div>
+        <div id="usersList" class="users-list"></div>
       </div>
-    </form>
+    </div>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
