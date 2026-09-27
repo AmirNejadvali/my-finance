@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#1f2937">
   <title>My Finance</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260927-1217">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -439,7 +439,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js?v=20260927-1217", { updateViaCache: "none" }).catch(() => {});
+    }
+    if ("caches" in window) {
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
+    }
+  </script>
+  <script src="config.js?v=20260927-1217"></script>
+  <script src="app.js?v=20260927-1217"></script>
 </body>
 </html>
