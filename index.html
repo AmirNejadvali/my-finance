@@ -67,19 +67,19 @@
       <div class="grid">
         <article class="card metric-card">
           <div class="small muted">Planned earnings</div>
-          <div id="dashEarnings" class="metric income-red">0 Toman</div>
+          <div id="dashEarnings" class="metric earning-blue">0 T</div>
         </article>
         <article class="card metric-card">
-          <div class="small muted">Loan payments</div>
-          <div id="dashPayments" class="metric payment-green">0 Toman</div>
+          <div class="small muted">Paid payments</div>
+          <div id="dashPayments" class="metric payment-green">0 T</div>
         </article>
         <article class="card metric-card">
           <div class="small muted">Remaining payments</div>
-          <div id="dashRemaining" class="metric bad">0 Toman</div>
+          <div id="dashRemaining" class="metric bad">0 T</div>
         </article>
         <article class="card metric-card">
           <div class="small muted">Planned net</div>
-          <div id="dashNet" class="metric">0 Toman</div>
+          <div id="dashNet" class="metric">0 T</div>
         </article>
 
         <article class="card full">
@@ -132,6 +132,19 @@
         <article class="card"><div class="small muted">All loan balance</div><div id="payOutstanding" class="metric warn">0</div></article>
       </div>
 
+      <article class="card calendar-card" style="margin-bottom:14px">
+        <div class="section-head">
+          <div>
+            <h2 id="calendarMonthTitle">Solar month calendar</h2>
+            <div class="small muted">Green = paid · Red = unpaid</div>
+          </div>
+        </div>
+        <div class="calendar-weekdays">
+          <span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span>
+        </div>
+        <div id="solarCalendar" class="solar-calendar"></div>
+      </article>
+
       <article class="card">
         <h2>Payments in selected month</h2>
         <div id="paymentsList" class="list"></div>
@@ -158,7 +171,7 @@
         <div class="chart-toolbar">
           <div>
             <h2 id="chartTitle">Cash-flow chart</h2>
-            <div class="small muted">Y axis: Toman · X axis: Solar months or years</div>
+            <div class="small muted">Y axis: T · X axis: Solar months or years</div>
           </div>
           <div class="chart-controls">
             <label>View
@@ -173,12 +186,13 @@
             <label id="chartDecadeWrap" class="hidden">Decade
               <select id="chartDecade"></select>
             </label>
-            <label class="toggle-label"><input id="chartPaymentsOn" type="checkbox" checked> Loan payments</label>
             <label class="toggle-label"><input id="chartEarningsOn" type="checkbox" checked> Earnings</label>
+            <label class="toggle-label"><input id="chartRemainingOn" type="checkbox" checked> Remaining payments</label>
+            <label class="toggle-label"><input id="chartPaidOn" type="checkbox" checked> Paid payments</label>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="cashflowChart"></canvas></div>
-        <div class="chart-note"><span class="chart-color payment-color"></span> Loan payments are green <span class="chart-color earning-color"></span> Earnings are red</div>
+        <div class="chart-note"><span class="chart-color earning-color"></span> Earnings are blue <span class="chart-color remaining-color"></span> Remaining payments are red <span class="chart-color payment-color"></span> Paid payments are green</div>
       </article>
     </section>
 
@@ -206,7 +220,7 @@
       </label>
 
       <div class="form-row">
-        <label>Original loan amount (Toman)
+        <label>Original loan amount (T)
           <input id="loanTotal" type="number" min="1" step="1" required>
         </label>
         <label>Repayment method
@@ -235,7 +249,7 @@
           <label>Number of payments
             <input id="loanCount" type="number" min="1" max="600">
           </label>
-          <label>Monthly installment (Toman)
+          <label>Monthly installment (T)
             <input id="loanInstallment" type="number" min="1" step="1">
           </label>
         </div>
@@ -256,7 +270,7 @@
         </div>
 
         <div class="manual-fill">
-          <label>Default monthly amount (Toman)
+          <label>Default monthly amount (T)
             <input id="manualFillAmount" type="number" min="1" step="1" placeholder="Optional">
           </label>
           <button id="manualFillBtn" class="ghost" type="button">Fill all months</button>
@@ -270,13 +284,13 @@
       </div>
 
       <label>Payment day of Solar month
-        <input id="loanDueDay" type="number" min="1" max="31" required>
+        <select id="loanDueDay" required><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option></select>
       </label>
 
       <div class="calc-box loan-summary">
         <div><span>End month</span><span id="loanEndText">—</span></div>
-        <div><span>Final payable amount</span><span id="loanFinalAmount">0 Toman</span></div>
-        <div><span>Total interest</span><span id="loanInterestAmount">0 Toman</span></div>
+        <div><span>Final payable amount</span><span id="loanFinalAmount">0 T</span></div>
+        <div><span>Total interest</span><span id="loanInterestAmount">0 T</span></div>
         <div><span>Interest over original amount</span><span id="loanInterestRate">0.0%</span></div>
         <div id="loanSummaryWarning" class="small bad"></div>
       </div>
@@ -310,7 +324,7 @@
       </div>
 
       <div class="form-row">
-        <label>Starting monthly amount (Toman)
+        <label>Starting monthly amount (T)
           <input id="salaryAmount" type="number" min="1" step="1" required>
         </label>
         <label>Annual growth estimate (%)
@@ -350,9 +364,9 @@
 
       <div class="calc-box salary-summary">
         <div><span>Forecast months</span><span id="salaryMonthsCount">0</span></div>
-        <div><span>First monthly amount</span><span id="salaryFirstAmount">0 Toman</span></div>
-        <div><span>Last monthly amount</span><span id="salaryLastAmount">0 Toman</span></div>
-        <div><span>Total forecast earnings</span><span id="salaryForecastTotal">0 Toman</span></div>
+        <div><span>First monthly amount</span><span id="salaryFirstAmount">0 T</span></div>
+        <div><span>Last monthly amount</span><span id="salaryLastAmount">0 T</span></div>
+        <div><span>Total forecast earnings</span><span id="salaryForecastTotal">0 T</span></div>
         <div id="salarySummaryWarning" class="small bad"></div>
       </div>
 
@@ -382,7 +396,7 @@
         </label>
         <label>Currency
           <select id="accountCurrency">
-            <option>TOMAN</option><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option>
+            <option value="TOMAN">T</option><option>AZN</option><option>USD</option><option>EUR</option><option>IRR</option>
           </select>
         </label>
       </div>
