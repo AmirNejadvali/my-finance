@@ -17,6 +17,7 @@ let selected = currentJalali();
 let selectedYear = selected.jy;
 let selectedMonth = selected.jm;
 let dashboardYear = selected.jy;
+let dashboardMonth = selected.jm;
 let chartInstance = null;
 let adminKey = "";
 
@@ -180,41 +181,55 @@ function dashboardHeatColor(due,remaining) {
   return "heat-yellow";
 }
 function renderDashboard() {
-  const curP = paymentTotals(selected.jy,selected.jm);
-  const curE = earningTotal(selected.jy,selected.jm);
-  $("dashMonth").textContent = monthText(selected.jy,selected.jm);
-  $("dashEarnings").textContent = money(curE);
-  $("dashPayments").textContent = money(curP.paid);
-  $("dashRemaining").textContent = money(curP.remaining);
-  $("dashNet").textContent = money(curE-curP.due);
+  const yearOptions=Array.from({length:11},(_,i)=>selected.jy-5+i);
+  if(!yearOptions.includes(dashboardYear)) dashboardYear=selected.jy;
+  if(dashboardMonth<1||dashboardMonth>12) dashboardMonth=selected.jm;
 
-  const years = chartYears();
-  if (!years.includes(dashboardYear)) dashboardYear = selected.jy;
-  $("dashYear").innerHTML = years.map(y=>'<option value="'+y+'" '+(y===dashboardYear?"selected":"")+'>'+y+'</option>').join("");
-  const year = dashboardYear;
-  $("heatYearLabel").textContent = String(year);
-  $("paymentHeatmap").innerHTML = MONTHS.map((name,i)=>{
-    const m=i+1, t=paymentTotals(year,m), cls=dashboardHeatColor(t.due,t.remaining);
-    return '<button class="heat-month '+cls+'" data-heat-month="'+m+'">' +
+  $("dashboardYearCircles").innerHTML=yearOptions.map((year,i)=>{
+    const current=year===selected.jy?" current-year":"";
+    const active=year===dashboardYear?" selected-circle":"";
+    return '<button class="nav-circle year-circle'+current+active+'" data-dashboard-year="'+year+'" title="'+year+'"><span>'+year+'</span></button>';
+  }).join("");
+
+  const yearPayments=payments.filter(p=>p.due_jyear===dashboardYear);
+  const yearTotal=yearPayments.reduce((s,p)=>s+n(p.amount),0);
+  const yearPaid=yearPayments.filter(p=>p.is_paid).reduce((s,p)=>s+n(p.amount),0);
+  const yearEarn=salaryMonths.filter(s=>s.due_jyear===dashboardYear).reduce((sum,s)=>sum+n(s.amount),0);
+  $("dashYearPayments").textContent=money(yearTotal);
+  $("dashYearEarnings").textContent=money(yearEarn);
+  $("dashYearPaid").textContent=money(yearPaid);
+
+  $("heatYearLabel").textContent=String(dashboardYear);
+  $("paymentHeatmap").innerHTML=MONTHS.map((name,i)=>{
+    const m=i+1,t=paymentTotals(dashboardYear,m),cls=dashboardHeatColor(t.due,t.remaining);
+    const selectedClass=m===dashboardMonth?" heat-selected":"";
+    return '<button class="heat-month '+cls+selectedClass+'" data-heat-month="'+m+'">' +
       '<span class="heat-name">'+name+'</span>' +
       '<span class="heat-due">'+money(t.due)+'</span>' +
       '<span class="heat-rem">'+(t.due ? money(t.remaining)+" remaining" : "No payment")+'</span>' +
       '</button>';
   }).join("");
 
-  const upcoming = payments
-    .filter(p=>!p.is_paid && monthKey(p.due_jyear,p.due_jmonth)>=monthKey(selected.jy,selected.jm))
-    .sort((a,b)=>monthKey(a.due_jyear,a.due_jmonth)-monthKey(b.due_jyear,b.due_jmonth) || a.installment_no-b.installment_no)
-    .slice(0,8);
-  $("dashUpcoming").innerHTML = upcoming.length ? upcoming.map(p=>{
+  const clickedRows=payments
+    .filter(p=>p.due_jyear===dashboardYear&&p.due_jmonth===dashboardMonth)
+    .sort((a,b)=>a.due_day-b.due_day||a.installment_no-b.installment_no);
+  $("dashClickedMonthTitle").textContent=monthText(dashboardYear,dashboardMonth)+" payments";
+  $("dashClickedMonthPayments").innerHTML=clickedRows.length?clickedRows.map(p=>{
     const l=loans.find(x=>x.id===p.loan_id);
-    return '<div class="row compact-row"><div><div class="row-title">'+esc(l ? l.name : "Loan")+'</div><div class="small muted">'+monthText(p.due_jyear,p.due_jmonth)+' · day '+p.due_day+'</div></div><div>'+money(p.amount)+'</div><div><span class="pill '+(isPastMonth(p.due_jyear,p.due_jmonth)?"bad":"warn")+'">'+(isPastMonth(p.due_jyear,p.due_jmonth)?"Overdue":"Unpaid")+'</span></div></div>';
-  }).join("") : '<div class="empty">No unpaid loan payments.</div>';
+    const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">Unpaid</span>';
+    return '<div class="row compact-row"><div><div class="row-title">'+esc(l?l.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+' · Installment '+p.installment_no+'</div></div><div>'+money(p.amount)+'</div><div>'+badge+'</div></div>';
+  }).join(""):'<div class="empty">No loan payments in this month.</div>';
 }
 
 function renderPayments() {
-  selectedYear = selected.jy;
-  selectedMonth = selected.jm;
+  selectedYear=selected.jy;
+  if(selectedMonth<1||selectedMonth>12) selectedMonth=selected.jm;
+  $("monthCircles").innerHTML=MONTHS.map((name,i)=>{
+    const m=i+1;
+    const current=m===selected.jm?" current-month":"";
+    const active=m===selectedMonth?" selected-circle":"";
+    return '<button class="nav-circle month-circle'+current+active+'" data-payment-month="'+m+'" title="'+name+'"><span class="circle-number">'+m+'</span><span class="circle-label">'+name.slice(0,3)+'</span></button>';
+  }).join("");
   renderSelectedMonth();
 }
 function renderSelectedMonth() {
@@ -225,7 +240,6 @@ function renderSelectedMonth() {
   $("payDue").textContent=money(t.due);
   $("payPaid").textContent=money(t.paid);
   $("payRemaining").textContent=money(t.remaining);
-  $("payOutstanding").textContent=money(payments.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0));
 
   $("paymentsList").innerHTML=t.rows.length?t.rows.map(p=>{
     const loan=loans.find(l=>l.id===p.loan_id);
@@ -622,9 +636,18 @@ function bind() {
   });
   $$("[data-close]").forEach(b=>b.onclick=()=>$(b.dataset.close).close());
 
-  $("dashYear").onchange=()=>{dashboardYear=n($("dashYear").value);renderDashboard();};
-  $("dashPrevYear").onclick=()=>{dashboardYear--;renderDashboard();};
-  $("dashNextYear").onclick=()=>{dashboardYear++;renderDashboard();};
+  $("monthCircles").onclick=e=>{
+    const b=e.target.closest("[data-payment-month]");if(!b)return;
+    selectedMonth=n(b.dataset.paymentMonth);renderPayments();
+  };
+  $("dashboardYearCircles").onclick=e=>{
+    const b=e.target.closest("[data-dashboard-year]");if(!b)return;
+    dashboardYear=n(b.dataset.dashboardYear);dashboardMonth=selected.jm;renderDashboard();
+  };
+  $("paymentHeatmap").onclick=e=>{
+    const b=e.target.closest("[data-heat-month]");if(!b)return;
+    dashboardMonth=n(b.dataset.heatMonth);renderDashboard();
+  };
   $("paymentsList").onchange=e=>{if(e.target.classList.contains("pay-toggle"))togglePayment(e.target.dataset.id,e.target.checked);};
 
   $("addLoanBtn").onclick=()=>openLoanDialog();
