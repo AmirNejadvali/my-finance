@@ -361,3 +361,7 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
   .payment-table-row{grid-template-columns:28px 1fr auto auto}
   .payment-table-row>div:nth-child(5){display:none}
 }
+
+.final-payment-row{background:#ecfdf5;border:1px solid #86efac}
+.final-payment-row .row-title{color:#166534}
+.final-payment-row .payment-no-cell>span:last-child{color:#166534;font-weight:700}
