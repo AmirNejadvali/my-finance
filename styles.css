@@ -297,3 +297,31 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
 @media(max-width:760px){
   .user-actions{max-width:230px}
 }
+
+.nav-circle.status-gray{background:#f1f5f9;border-color:#cbd5e1;color:#64748b}
+.nav-circle.selected-circle.status-gray{background:#f1f5f9;border-color:#94a3b8;color:#475569}
+.payment-year-nav{display:flex;align-items:center;justify-content:center;gap:12px;margin:4px 0 8px}
+.year-center-btn{border:0;background:transparent;display:grid;gap:2px;text-align:center;color:var(--ink);min-width:92px;padding:5px 10px;border-radius:12px}
+.year-center-btn:hover{background:#f8fafc}
+.year-center-btn strong{font-size:20px;font-weight:500}
+.dashboard-domain-card{margin-bottom:10px;padding:12px 14px}
+.dashboard-domain-controls{display:grid;grid-template-columns:minmax(220px,1fr) 120px 120px auto;gap:10px;align-items:end}
+.dashboard-domain-controls label{display:grid;gap:5px;font-size:11px;color:var(--muted)}
+.dashboard-domain-controls input{width:100%}
+.dashboard-payment-row{grid-template-columns:minmax(180px,1.4fr) minmax(120px,.75fr) minmax(90px,.55fr) auto}
+.dashboard-payment-row .dashboard-pay-toggle{width:20px;height:20px}
+@media(max-width:760px){
+  .dashboard-domain-controls{grid-template-columns:1fr 1fr}
+  .dashboard-domain-controls>div:first-child{grid-column:1/-1}
+  .dashboard-domain-controls button{align-self:end}
+  .payment-year-nav{gap:8px}
+  .payment-year-nav .ghost{padding:8px 10px;font-size:11px}
+  .dashboard-payment-row{grid-template-columns:1fr auto}
+  .dashboard-payment-row>div:nth-child(3){display:none}
+}
+@media(max-width:520px){
+  .dashboard-domain-controls{grid-template-columns:1fr}
+  .dashboard-domain-controls>div:first-child{grid-column:auto}
+  .payment-year-nav{justify-content:space-between}
+  .payment-year-nav .ghost{max-width:110px}
+}
