@@ -20,6 +20,8 @@ let dashboardYear = selected.jy;
 let dashboardMonth = selected.jm;
 let chartInstance = null;
 let adminKey = "";
+let passwordTargetUserId = null;
+let passwordTargetEmail = "";
 
 function toast(msg) {
   const el = $("toast");
@@ -180,6 +182,16 @@ function dashboardHeatColor(due,remaining) {
   if (paidRatio <= 0.60) return "heat-orange";
   return "heat-yellow";
 }
+function monthCircleStatus(jy,jm) {
+  if(monthKey(jy,jm)>monthKey(selected.jy,selected.jm)) return "status-green";
+  return paymentTotals(jy,jm).remaining>0 ? "status-red" : "status-green";
+}
+function yearCircleStatus(jy) {
+  if(jy>selected.jy) return "status-green";
+  const cutoff=jy<selected.jy?12:selected.jm;
+  const hasUnpaid=payments.some(p=>p.due_jyear===jy&&p.due_jmonth<=cutoff&&!p.is_paid);
+  return hasUnpaid ? "status-red" : "status-green";
+}
 function renderDashboard() {
   const yearOptions=Array.from({length:11},(_,i)=>selected.jy-5+i);
   if(!yearOptions.includes(dashboardYear)) dashboardYear=selected.jy;
@@ -188,7 +200,8 @@ function renderDashboard() {
   $("dashboardYearCircles").innerHTML=yearOptions.map((year,i)=>{
     const current=year===selected.jy?" current-year":"";
     const active=year===dashboardYear?" selected-circle":"";
-    return '<button class="nav-circle year-circle'+current+active+'" data-dashboard-year="'+year+'" title="'+year+'"><span>'+year+'</span></button>';
+    const status=yearCircleStatus(year);
+    return '<button class="nav-circle year-circle '+status+current+active+'" data-dashboard-year="'+year+'" title="'+year+'"><span>'+year+'</span></button>';
   }).join("");
 
   const yearPayments=payments.filter(p=>p.due_jyear===dashboardYear);
@@ -228,7 +241,8 @@ function renderPayments() {
     const m=i+1;
     const current=m===selected.jm?" current-month":"";
     const active=m===selectedMonth?" selected-circle":"";
-    return '<button class="nav-circle month-circle'+current+active+'" data-payment-month="'+m+'" title="'+name+'"><span class="circle-number">'+m+'</span><span class="circle-label">'+name.slice(0,3)+'</span></button>';
+    const status=monthCircleStatus(selectedYear,m);
+    return '<button class="nav-circle month-circle '+status+current+active+'" data-payment-month="'+m+'" title="'+name+'"><span class="circle-number">'+m+'</span><span class="circle-label">'+name.slice(0,3)+'</span></button>';
   }).join("");
   renderSelectedMonth();
 }
@@ -240,6 +254,10 @@ function renderSelectedMonth() {
   $("payDue").textContent=money(t.due);
   $("payPaid").textContent=money(t.paid);
   $("payRemaining").textContent=money(t.remaining);
+  const prev=addJMonth(selectedYear,selectedMonth,-1);
+  const prevTotals=paymentTotals(prev.jy,prev.jm);
+  $("payPrevRemainingLabel").textContent="Remaining from "+monthText(prev.jy,prev.jm);
+  $("payPrevRemaining").textContent=money(prevTotals.remaining);
 
   $("paymentsList").innerHTML=t.rows.length?t.rows.map(p=>{
     const loan=loans.find(l=>l.id===p.loan_id);
@@ -422,6 +440,12 @@ async function saveLoan(e) {
   if(!name||principal<=0||!sy||!sm||!schedule){toast("Complete the loan schedule.");return;}
   const finalPayable=schedule.reduce((s,x)=>s+x.amount,0);
   if(finalPayable<principal){toast("Final payable amount cannot be lower than the original loan amount.");return;}
+
+  let autoPastPaid=false;
+  if(!id && monthKey(sy,sm)<monthKey(selected.jy,selected.jm)){
+    autoPastPaid=confirm("This loan starts before the current Solar month. Mark all past installments before the current month as paid automatically?");
+  }
+
   const last=schedule[schedule.length-1], installment=mode==="equal"?schedule[0].amount:null;
   const data={
     name:name,lender:$("loanLender").value.trim(),total_amount:principal,start_jyear:sy,start_jmonth:sm,
@@ -430,6 +454,19 @@ async function saveLoan(e) {
   };
   const r=await sb.rpc("save_loan_schedule",{p_loan_id:id,p_loan:data,p_schedule:schedule});
   if(r.error){toast(r.error.message);return;}
+
+  if(!id && autoPastPaid && r.data){
+    const paidAt=new Date().toISOString();
+    const [olderYears,currentYearPast]=await Promise.all([
+      sb.from("loan_payments").update({is_paid:true,paid_at:paidAt}).eq("loan_id",r.data).lt("due_jyear",selected.jy),
+      sb.from("loan_payments").update({is_paid:true,paid_at:paidAt}).eq("loan_id",r.data).eq("due_jyear",selected.jy).lt("due_jmonth",selected.jm)
+    ]);
+    if(olderYears.error||currentYearPast.error){
+      toast((olderYears.error||currentYearPast.error).message);
+      return;
+    }
+  }
+
   $("loanDialog").close();toast(id?"Loan updated.":"Loan added.");await refreshAll();
 }
 
@@ -747,7 +784,11 @@ function renderUsers(users) {
   $("usersList").innerHTML=users.length?users.map(u=>
     '<div class="user-row"><div><div class="row-title">'+esc(u.email||"(no email)")+'</div><div class="small muted">Created '+new Date(u.created_at).toLocaleDateString()+(u.last_sign_in_at?" · Last sign-in "+new Date(u.last_sign_in_at).toLocaleDateString():"")+'</div></div>' +
     '<div><span class="pill '+(u.approved?"good":"bad")+'">'+(u.approved?"Approved":"Blocked")+'</span></div>' +
-    '<div><button class="ghost user-access-toggle" data-id="'+u.id+'" data-approved="'+(u.approved?"1":"0")+'" '+(u.is_current?"disabled":"")+'>'+(u.approved?"Revoke":"Approve")+'</button></div></div>'
+    '<div class="user-actions">' +
+      '<button class="ghost user-password" data-id="'+u.id+'" data-email="'+esc(u.email||"")+'">Change password</button>' +
+      '<button class="ghost user-access-toggle" data-id="'+u.id+'" data-approved="'+(u.approved?"1":"0")+'" '+(u.is_current?"disabled":"")+'>'+(u.approved?"Block":"Approve")+'</button>' +
+      '<button class="ghost danger user-remove" data-id="'+u.id+'" data-email="'+esc(u.email||"")+'" '+(u.is_current?"disabled":"")+'">Remove account</button>' +
+    '</div></div>'
   ).join(""):'<div class="empty">No users.</div>';
 }
 async function refreshUsers() {
@@ -756,6 +797,31 @@ async function refreshUsers() {
 function openUserManager() {
   adminKey="";$("adminPassKey").value="";$("adminMsg").textContent="";$("usersList").innerHTML="";
   $("adminLocked").classList.remove("hidden");$("adminUnlocked").classList.add("hidden");$("usersDialog").showModal();
+}
+function openPasswordDialog(userId,email) {
+  passwordTargetUserId=userId;
+  passwordTargetEmail=email||"User";
+  $("passwordUserLabel").textContent=passwordTargetEmail;
+  $("newUserPassword").value="";
+  $("passwordChangeMsg").textContent="";
+  $("userPasswordDialog").showModal();
+}
+async function saveUserPassword() {
+  const password=$("newUserPassword").value;
+  if(password.length<8){$("passwordChangeMsg").textContent="Password must be at least 8 characters.";return;}
+  try{
+    await manageUsersRequest("change_password",{user_id:passwordTargetUserId,password});
+    $("userPasswordDialog").close();
+    toast("Password changed.");
+  }catch(e){$("passwordChangeMsg").textContent=e.message;}
+}
+async function removeUserAccount(userId,email) {
+  if(!confirm("Permanently remove "+(email||"this user")+" and all of this user's finance data?"))return;
+  try{
+    await manageUsersRequest("delete_user",{user_id:userId});
+    toast("User account removed.");
+    await refreshUsers();
+  }catch(e){toast(e.message);}
 }
 
 function exportBackup() {
@@ -826,12 +892,18 @@ function bind() {
   $("adminUnlockBtn").onclick=unlockUserManager;
   $("adminRefreshBtn").onclick=refreshUsers;
   $("usersList").onclick=async e=>{
-    const b=e.target.closest(".user-access-toggle");if(!b)return;
+    const pass=e.target.closest(".user-password");
+    const access=e.target.closest(".user-access-toggle");
+    const remove=e.target.closest(".user-remove");
+    if(pass){openPasswordDialog(pass.dataset.id,pass.dataset.email);return;}
+    if(remove){await removeUserAccount(remove.dataset.id,remove.dataset.email);return;}
+    if(!access)return;
     try{
-      await manageUsersRequest("set_access",{user_id:b.dataset.id,approved:b.dataset.approved!=="1"});
+      await manageUsersRequest("set_access",{user_id:access.dataset.id,approved:access.dataset.approved!=="1"});
       await refreshUsers();
     }catch(err){toast(err.message);}
   };
+  $("saveUserPasswordBtn").onclick=saveUserPassword;
 }
 
 bind();
