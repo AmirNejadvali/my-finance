@@ -196,6 +196,19 @@ function yearCircleStatus(jy) {
   const hasUnpaid=payments.some(p=>p.due_jyear===jy&&p.due_jmonth<=cutoff&&!p.is_paid);
   return hasUnpaid ? "status-red" : "status-green";
 }
+function loanPaymentPosition(payment) {
+  const schedule=payments
+    .filter(p=>p.loan_id===payment.loan_id)
+    .slice()
+    .sort((a,b)=>
+      monthKey(a.due_jyear,a.due_jmonth)-monthKey(b.due_jyear,b.due_jmonth) ||
+      n(a.due_day)-n(b.due_day) ||
+      n(a.installment_no)-n(b.installment_no)
+    );
+  const index=schedule.findIndex(p=>p.id===payment.id);
+  return {current:index>=0?index+1:n(payment.installment_no),total:schedule.length};
+}
+
 function renderDashboard() {
   dashboardStartYear=Math.max(1300,Math.round(n(dashboardStartYear)||selected.jy-5));
   dashboardEndYear=Math.min(1600,Math.round(n(dashboardEndYear)||selected.jy+5));
@@ -241,13 +254,14 @@ function renderDashboard() {
     .filter(p=>p.due_jyear===dashboardYear&&p.due_jmonth===dashboardMonth)
     .sort((a,b)=>a.due_day-b.due_day||a.installment_no-b.installment_no);
   $("dashClickedMonthTitle").textContent=monthText(dashboardYear,dashboardMonth)+" payments";
-  $("dashClickedMonthPayments").innerHTML=clickedRows.length?clickedRows.map(p=>{
+  $("dashClickedMonthPayments").innerHTML=clickedRows.length?clickedRows.map((p,rowIndex)=>{
     const l=loans.find(x=>x.id===p.loan_id);
-    const totalCount=n(l?.payment_count)||payments.filter(x=>x.loan_id===p.loan_id).length;
+    const pos=loanPaymentPosition(p);
     const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">Unpaid</span>';
     return '<div class="row dashboard-payment-row">' +
+      '<div class="row-number-cell">'+(rowIndex+1)+'</div>' +
       '<div><div class="row-title">'+esc(l?l.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+'</div></div>' +
-      '<div class="payment-no-cell" title="Payment number"><span class="small muted">Payment No.</span><span>'+p.installment_no+'/'+totalCount+'</span></div>' +
+      '<div class="payment-no-cell" title="Installment position in this loan"><span class="small muted">Payment</span><span>'+pos.current+'/'+pos.total+'</span></div>' +
       '<div>'+money(p.amount)+'</div><div>'+badge+'</div>' +
       '<div><input class="dashboard-pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div>' +
       '</div>';
@@ -280,13 +294,14 @@ function renderSelectedMonth() {
   $("payPrevRemainingLabel").textContent="Remaining from "+monthText(prev.jy,prev.jm);
   $("payPrevRemaining").textContent=money(prevTotals.remaining);
 
-  $("paymentsList").innerHTML=t.rows.length?t.rows.map(p=>{
+  $("paymentsList").innerHTML=t.rows.length?t.rows.map((p,rowIndex)=>{
     const loan=loans.find(l=>l.id===p.loan_id);
-    const totalCount=n(loan?.payment_count)||payments.filter(x=>x.loan_id===p.loan_id).length;
+    const pos=loanPaymentPosition(p);
     const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">'+(isPastMonth(p.due_jyear,p.due_jmonth)?"Overdue":"Unpaid")+'</span>';
     return '<div class="row payment-table-row">' +
+      '<div class="row-number-cell">'+(rowIndex+1)+'</div>' +
       '<div><div class="row-title">'+esc(loan?loan.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+'</div></div>' +
-      '<div class="payment-no-cell" title="Payment number"><span class="small muted">Payment No.</span><span>'+p.installment_no+'/'+totalCount+'</span></div>' +
+      '<div class="payment-no-cell" title="Installment position in this loan"><span class="small muted">Payment</span><span>'+pos.current+'/'+pos.total+'</span></div>' +
       '<div>'+money(p.amount)+'</div><div class="mobile-hide">'+badge+'</div>' +
       '<div class="optional small muted">'+(p.paid_at ? "Paid "+new Date(p.paid_at).toLocaleDateString("en-US-u-ca-persian") : "Not paid")+'</div>' +
       '<div><input class="pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div></div>';
