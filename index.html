@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#1f2937">
   <title>My Finance</title>
-  <link rel="stylesheet" href="styles.css?v=20260927-1735">
+  <link rel="stylesheet" href="styles.css?v=20260928-0835">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -105,6 +105,7 @@
         <article class="card"><div class="small muted">Total payments</div><div id="payDue" class="metric">0</div></article>
         <article class="card"><div class="small muted">Paid</div><div id="payPaid" class="metric good">0</div></article>
         <article class="card"><div class="small muted">Remaining</div><div id="payRemaining" class="metric bad">0</div></article>
+        <article class="card carryover-card"><div id="payPrevRemainingLabel" class="small muted">Remaining from previous month</div><div id="payPrevRemaining" class="metric bad">0</div></article>
       </div>
 
       <article class="card calendar-card" style="margin-bottom:14px">
@@ -441,7 +442,7 @@
 
       <div id="adminUnlocked" class="hidden">
         <div class="toolbar">
-          <span class="small muted">Approve or revoke access to this finance app.</span>
+          <span class="small muted">Approve/block users, change passwords, or permanently remove accounts. Existing passwords cannot be viewed.</span>
           <div class="spacer"></div>
           <button id="adminRefreshBtn" class="ghost" type="button">Refresh</button>
         </div>
@@ -450,17 +451,36 @@
     </div>
   </dialog>
 
+  <dialog id="userPasswordDialog">
+    <div class="modal-form password-dialog-form">
+      <div class="modal-head">
+        <h2>Change user password</h2>
+        <button type="button" class="icon-btn" data-close="userPasswordDialog">×</button>
+      </div>
+      <div class="small muted">User: <span id="passwordUserLabel"></span></div>
+      <div class="small muted">The current password cannot be viewed. Set a new password here.</div>
+      <label>New password
+        <input id="newUserPassword" type="password" minlength="8" autocomplete="new-password">
+      </label>
+      <div id="passwordChangeMsg" class="small bad"></div>
+      <div class="modal-actions">
+        <button class="ghost" type="button" data-close="userPasswordDialog">Cancel</button>
+        <button id="saveUserPasswordBtn" class="primary" type="button">Change password</button>
+      </div>
+    </div>
+  </dialog>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js?v=20260927-1735", { updateViaCache: "none" }).catch(() => {});
+      navigator.serviceWorker.register("./sw.js?v=20260928-0835", { updateViaCache: "none" }).catch(() => {});
     }
     if ("caches" in window) {
       caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
     }
   </script>
-  <script src="config.js?v=20260927-1735"></script>
-  <script src="app.js?v=20260927-1735"></script>
+  <script src="config.js?v=20260928-0835"></script>
+  <script src="app.js?v=20260928-0835"></script>
 </body>
 </html>
