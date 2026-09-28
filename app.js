@@ -18,6 +18,8 @@ let selectedYear = selected.jy;
 let selectedMonth = selected.jm;
 let dashboardYear = selected.jy;
 let dashboardMonth = selected.jm;
+let dashboardStartYear = selected.jy - 5;
+let dashboardEndYear = selected.jy + 5;
 let chartInstance = null;
 let adminKey = "";
 let passwordTargetUserId = null;
@@ -183,21 +185,31 @@ function dashboardHeatColor(due,remaining) {
   return "heat-yellow";
 }
 function monthCircleStatus(jy,jm) {
-  if(monthKey(jy,jm)>monthKey(selected.jy,selected.jm)) return "status-green";
+  if(monthKey(jy,jm)>monthKey(selected.jy,selected.jm)) return "status-gray";
   return paymentTotals(jy,jm).remaining>0 ? "status-red" : "status-green";
 }
 function yearCircleStatus(jy) {
-  if(jy>selected.jy) return "status-green";
+  if(jy>selected.jy) return "status-gray";
   const cutoff=jy<selected.jy?12:selected.jm;
   const hasUnpaid=payments.some(p=>p.due_jyear===jy&&p.due_jmonth<=cutoff&&!p.is_paid);
   return hasUnpaid ? "status-red" : "status-green";
 }
 function renderDashboard() {
-  const yearOptions=Array.from({length:11},(_,i)=>selected.jy-5+i);
-  if(!yearOptions.includes(dashboardYear)) dashboardYear=selected.jy;
+  dashboardStartYear=Math.max(1300,Math.round(n(dashboardStartYear)||selected.jy-5));
+  dashboardEndYear=Math.min(1600,Math.round(n(dashboardEndYear)||selected.jy+5));
+  if(dashboardEndYear<dashboardStartYear) dashboardEndYear=dashboardStartYear;
+  if(dashboardEndYear-dashboardStartYear>100) dashboardEndYear=dashboardStartYear+100;
+
+  $("dashDomainStart").value=String(dashboardStartYear);
+  $("dashDomainEnd").value=String(dashboardEndYear);
+
+  const yearOptions=Array.from({length:dashboardEndYear-dashboardStartYear+1},(_,i)=>dashboardStartYear+i);
+  if(!yearOptions.includes(dashboardYear)){
+    dashboardYear=(selected.jy>=dashboardStartYear&&selected.jy<=dashboardEndYear)?selected.jy:dashboardStartYear;
+  }
   if(dashboardMonth<1||dashboardMonth>12) dashboardMonth=selected.jm;
 
-  $("dashboardYearCircles").innerHTML=yearOptions.map((year,i)=>{
+  $("dashboardYearCircles").innerHTML=yearOptions.map(year=>{
     const current=year===selected.jy?" current-year":"";
     const active=year===dashboardYear?" selected-circle":"";
     const status=yearCircleStatus(year);
@@ -230,16 +242,21 @@ function renderDashboard() {
   $("dashClickedMonthPayments").innerHTML=clickedRows.length?clickedRows.map(p=>{
     const l=loans.find(x=>x.id===p.loan_id);
     const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">Unpaid</span>';
-    return '<div class="row compact-row"><div><div class="row-title">'+esc(l?l.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+' · Installment '+p.installment_no+'</div></div><div>'+money(p.amount)+'</div><div>'+badge+'</div></div>';
+    return '<div class="row dashboard-payment-row">' +
+      '<div><div class="row-title">'+esc(l?l.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+' · Installment '+p.installment_no+'</div></div>' +
+      '<div>'+money(p.amount)+'</div><div>'+badge+'</div>' +
+      '<div><input class="dashboard-pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div>' +
+      '</div>';
   }).join(""):'<div class="empty">No loan payments in this month.</div>';
 }
 
 function renderPayments() {
-  selectedYear=selected.jy;
+  if(!selectedYear) selectedYear=selected.jy;
   if(selectedMonth<1||selectedMonth>12) selectedMonth=selected.jm;
+  $("paymentYearLabel").textContent=String(selectedYear);
   $("monthCircles").innerHTML=MONTHS.map((name,i)=>{
     const m=i+1;
-    const current=m===selected.jm?" current-month":"";
+    const current=(selectedYear===selected.jy&&m===selected.jm)?" current-month":"";
     const active=m===selectedMonth?" selected-circle":"";
     const status=monthCircleStatus(selectedYear,m);
     return '<button class="nav-circle month-circle '+status+current+active+'" data-payment-month="'+m+'" title="'+name+'"><span class="circle-number">'+m+'</span><span class="circle-label">'+name.slice(0,3)+'</span></button>';
@@ -848,15 +865,28 @@ function bind() {
     const b=e.target.closest("[data-payment-month]");if(!b)return;
     selectedMonth=n(b.dataset.paymentMonth);renderPayments();
   };
+  $("paymentPrevYear").onclick=()=>{selectedYear--;renderPayments();};
+  $("paymentNextYear").onclick=()=>{selectedYear++;renderPayments();};
+  $("paymentCurrentYear").onclick=()=>{selectedYear=selected.jy;selectedMonth=selected.jm;renderPayments();};
   $("dashboardYearCircles").onclick=e=>{
     const b=e.target.closest("[data-dashboard-year]");if(!b)return;
     dashboardYear=n(b.dataset.dashboardYear);dashboardMonth=selected.jm;renderDashboard();
+  };
+  $("dashLoadDomain").onclick=()=>{
+    const start=Math.round(n($("dashDomainStart").value));
+    const end=Math.round(n($("dashDomainEnd").value));
+    if(start<1300||end>1600||end<start){toast("Choose a valid Solar year domain.");return;}
+    if(end-start>100){toast("Dashboard preview is limited to 101 years at once.");return;}
+    dashboardStartYear=start;dashboardEndYear=end;
+    if(dashboardYear<start||dashboardYear>end) dashboardYear=(selected.jy>=start&&selected.jy<=end)?selected.jy:start;
+    renderDashboard();
   };
   $("paymentHeatmap").onclick=e=>{
     const b=e.target.closest("[data-heat-month]");if(!b)return;
     dashboardMonth=n(b.dataset.heatMonth);renderDashboard();
   };
   $("paymentsList").onchange=e=>{if(e.target.classList.contains("pay-toggle"))togglePayment(e.target.dataset.id,e.target.checked);};
+  $("dashClickedMonthPayments").onchange=e=>{if(e.target.classList.contains("dashboard-pay-toggle"))togglePayment(e.target.dataset.id,e.target.checked);};
 
   $("addLoanBtn").onclick=()=>openLoanDialog();
   $("loanForm").onsubmit=saveLoan;
