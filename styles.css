@@ -236,13 +236,14 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
 .nav-circle{width:58px;height:58px;min-width:58px;border-radius:50%;border:1px solid #d8e0eb;background:#fff;color:#475569;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease;position:relative}
 .nav-circle:hover{border-color:#9fb4d0;background:#f8fbff}
 .nav-circle.selected-circle{transform:scale(1.5);z-index:3;border-color:#64748b;box-shadow:0 6px 18px rgba(31,41,55,.14);background:#fff;color:#1f2937}
-.nav-circle.current-month:not(.selected-circle),.nav-circle.current-year:not(.selected-circle){border:2px solid #93b4ff;background:#f7faff}
+.nav-circle.current-month:not(.selected-circle),.nav-circle.current-year:not(.selected-circle){outline:2px solid #93b4ff;outline-offset:2px}
 .month-circle{font-size:12px}
 .month-circle .circle-number{font-size:15px;line-height:1;font-weight:500}
 .month-circle .circle-label{font-size:9px;color:#7c8798;line-height:1}
 .year-circle{font-size:12px;font-weight:500}
 .dashboard-circle-wrap{margin-top:2px}
-.dashboard-year-summary,.current-month-summary{grid-template-columns:repeat(3,1fr)}
+.dashboard-year-summary{grid-template-columns:repeat(3,1fr)}
+.current-month-summary{grid-template-columns:repeat(4,1fr)}
 .selected-month-head{justify-content:center;text-align:center;margin-top:2px}
 .heat-month.heat-selected{outline:3px solid #64748b;outline-offset:2px}
 @media(max-width:1050px){
@@ -252,10 +253,12 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
   .circle-strip-wrap{padding-left:24px;padding-right:24px}
   .nav-circle{width:52px;height:52px;min-width:52px}
   .circle-strip{gap:17px}
-  .dashboard-year-summary,.current-month-summary{grid-template-columns:repeat(3,1fr)}
+  .dashboard-year-summary{grid-template-columns:repeat(3,1fr)}
+  .current-month-summary{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:620px){
-  .dashboard-year-summary,.current-month-summary{grid-template-columns:1fr 1fr 1fr}
+  .dashboard-year-summary{grid-template-columns:1fr 1fr 1fr}
+  .current-month-summary{grid-template-columns:1fr 1fr}
   .dashboard-year-summary .card,.current-month-summary .card{padding:10px}
   .dashboard-year-summary .metric,.current-month-summary .metric{font-size:17px}
   .dashboard-year-summary .small,.current-month-summary .small{font-size:10px}
@@ -281,4 +284,16 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
 @media(max-width:620px){
   .chart-range-group{grid-column:span 2;display:grid;grid-template-columns:1fr 1fr;width:100%}
   .chart-range-group.hidden{display:none}
+}
+
+.nav-circle.status-green{background:#dcfce7;border-color:#86efac;color:#166534}
+.nav-circle.status-red{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+.nav-circle.selected-circle.status-green{background:#dcfce7;border-color:#22c55e;color:#14532d}
+.nav-circle.selected-circle.status-red{background:#fee2e2;border-color:#ef4444;color:#7f1d1d}
+.carryover-card{border-color:#fecaca;background:#fffafa}
+.user-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.user-actions .ghost{padding:7px 9px;font-size:11px}
+.password-dialog-form{width:min(440px,calc(100vw - 48px))}
+@media(max-width:760px){
+  .user-actions{max-width:230px}
 }
