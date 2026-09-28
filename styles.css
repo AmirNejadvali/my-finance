@@ -337,3 +337,13 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
   .toolbar-field{width:100%}
   .toolbar-field select{width:100%}
 }
+
+.payment-table-row{grid-template-columns:minmax(180px,1.4fr) minmax(82px,.45fr) minmax(120px,.75fr) minmax(100px,.6fr) minmax(120px,.8fr) auto}
+.dashboard-payment-row{grid-template-columns:minmax(180px,1.4fr) minmax(82px,.45fr) minmax(120px,.75fr) minmax(90px,.55fr) auto}
+.payment-no-cell{display:grid;gap:2px;align-items:center}
+.payment-no-cell>span:last-child{font-weight:500}
+@media(max-width:760px){
+  .payment-table-row,.dashboard-payment-row{grid-template-columns:1fr auto auto}
+  .payment-table-row>div:nth-child(4),.payment-table-row>div:nth-child(5){display:none}
+  .dashboard-payment-row>div:nth-child(4){display:none}
+}
