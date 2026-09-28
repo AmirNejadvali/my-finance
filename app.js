@@ -258,7 +258,8 @@ function renderDashboard() {
     const l=loans.find(x=>x.id===p.loan_id);
     const pos=loanPaymentPosition(p);
     const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">Unpaid</span>';
-    return '<div class="row dashboard-payment-row">' +
+    const finalClass=pos.current===pos.total?" final-payment-row":"";
+    return '<div class="row dashboard-payment-row'+finalClass+'">' +
       '<div class="row-number-cell">'+(rowIndex+1)+'</div>' +
       '<div><div class="row-title">'+esc(l?l.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+'</div></div>' +
       '<div class="payment-no-cell" title="Installment position in this loan"><span class="small muted">Payment</span><span>'+pos.current+'/'+pos.total+'</span></div>' +
@@ -297,13 +298,15 @@ function renderSelectedMonth() {
   $("paymentsList").innerHTML=t.rows.length?t.rows.map((p,rowIndex)=>{
     const loan=loans.find(l=>l.id===p.loan_id);
     const pos=loanPaymentPosition(p);
-    const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">'+(isPastMonth(p.due_jyear,p.due_jmonth)?"Overdue":"Unpaid")+'</span>';
-    return '<div class="row payment-table-row">' +
+    const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">Unpaid</span>';
+    const finalClass=pos.current===pos.total?" final-payment-row":"";
+    return '<div class="row dashboard-payment-row'+finalClass+'">' +
       '<div class="row-number-cell">'+(rowIndex+1)+'</div>' +
-      '<div><div class="row-title">'+esc(loan?loan.name:"Loan")+'</div></div>' +
-      '<div class="payment-no-cell" title="Payment '+pos.current+' of '+pos.total+'"><span class="payment-ratio">'+pos.current+'/'+pos.total+'</span></div>' +
-      '<div>'+money(p.amount)+'</div><div class="mobile-hide">'+badge+'</div>' +
-      '<div><input class="pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div></div>';
+      '<div><div class="row-title">'+esc(loan?loan.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+'</div></div>' +
+      '<div class="payment-no-cell" title="Installment position in this loan"><span class="small muted">Payment</span><span>'+pos.current+'/'+pos.total+'</span></div>' +
+      '<div>'+money(p.amount)+'</div><div>'+badge+'</div>' +
+      '<div><input class="pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div>' +
+      '</div>';
   }).join(""):'<div class="empty">No loan payments in this Solar month.</div>';
   renderSolarCalendar(selectedYear,selectedMonth,t.rows);
 }
