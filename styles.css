@@ -325,3 +325,15 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
   .payment-year-nav{justify-content:space-between}
   .payment-year-nav .ghost{max-width:110px}
 }
+
+.loan-toolbar{align-items:end}
+.toolbar-field{display:grid;gap:5px;font-size:11px;color:var(--muted)}
+.toolbar-field select{min-width:150px}
+.monthly-payment-line{padding-top:6px;margin-top:4px;border-top:1px dashed var(--line)}
+.tiny-muted{font-size:10px;color:var(--muted)}
+@media(max-width:760px){
+  .loan-toolbar{align-items:stretch}
+  .loan-toolbar .spacer{display:none}
+  .toolbar-field{width:100%}
+  .toolbar-field select{width:100%}
+}
