@@ -20,6 +20,8 @@ let dashboardYear = selected.jy;
 let dashboardMonth = selected.jm;
 let dashboardStartYear = selected.jy - 5;
 let dashboardEndYear = selected.jy + 5;
+let loanSortBy = "start";
+let loanSortOrder = "asc";
 let chartInstance = null;
 let adminKey = "";
 let passwordTargetUserId = null;
@@ -323,15 +325,55 @@ function loanFinancials(l,lp) {
   return {principal,finalPayable,interest,rate};
 }
 function renderLoans() {
-  $("loansGrid").innerHTML=loans.length?loans.map(l=>{
-    const lp=payments.filter(p=>p.loan_id===l.id);
+  const enriched=loans.map(l=>{
+    const lp=payments.filter(p=>p.loan_id===l.id)
+      .sort((a,b)=>monthKey(a.due_jyear,a.due_jmonth)-monthKey(b.due_jyear,b.due_jmonth)||a.installment_no-b.installment_no);
     const paid=lp.filter(p=>p.is_paid);
-    const rem=lp.filter(p=>!p.is_paid).reduce((s,p)=>s+n(p.amount),0);
+    const unpaid=lp.filter(p=>!p.is_paid);
+    const rem=unpaid.reduce((s,p)=>s+n(p.amount),0);
     const monthRows=lp.filter(p=>p.due_jyear===selected.jy&&p.due_jmonth===selected.jm);
     const monthTotal=monthRows.reduce((s,p)=>s+n(p.amount),0);
     const monthPaid=monthRows.filter(p=>p.is_paid).reduce((s,p)=>s+n(p.amount),0);
+    const exactCurrent=monthRows.length>0;
+
+    let referenceRows=monthRows;
+    if(!referenceRows.length){
+      const future=lp.filter(p=>monthKey(p.due_jyear,p.due_jmonth)>monthKey(selected.jy,selected.jm));
+      if(future.length){
+        const k=monthKey(future[0].due_jyear,future[0].due_jmonth);
+        referenceRows=future.filter(p=>monthKey(p.due_jyear,p.due_jmonth)===k);
+      }else if(lp.length){
+        const last=lp[lp.length-1],k=monthKey(last.due_jyear,last.due_jmonth);
+        referenceRows=lp.filter(p=>monthKey(p.due_jyear,p.due_jmonth)===k);
+      }
+    }
+    const referenceMonthly=referenceRows.reduce((s,p)=>s+n(p.amount),0);
     const pct=lp.length?Math.round(paid.length*100/lp.length):0;
     const f=loanFinancials(l,lp);
+
+    return {
+      l,lp,paid,unpaid,rem,monthTotal,monthPaid,referenceMonthly,exactCurrent,pct,f,
+      startKey:monthKey(l.start_jyear,l.start_jmonth),
+      endKey:monthKey(l.end_jyear,l.end_jmonth)
+    };
+  });
+
+  const dir=loanSortOrder==="desc"?-1:1;
+  enriched.sort((a,b)=>{
+    let cmp=0;
+    if(loanSortBy==="start")cmp=a.startKey-b.startKey;
+    else if(loanSortBy==="end")cmp=a.endKey-b.endKey;
+    else if(loanSortBy==="name")cmp=String(a.l.name||"").localeCompare(String(b.l.name||""),undefined,{sensitivity:"base"});
+    else if(loanSortBy==="remaining_count")cmp=a.unpaid.length-b.unpaid.length;
+    else if(loanSortBy==="remaining_amount")cmp=a.rem-b.rem;
+    else if(loanSortBy==="monthly_payment")cmp=a.referenceMonthly-b.referenceMonthly;
+    if(cmp===0)cmp=String(a.l.name||"").localeCompare(String(b.l.name||""),undefined,{sensitivity:"base"});
+    return cmp*dir;
+  });
+
+  $("loansGrid").innerHTML=enriched.length?enriched.map(x=>{
+    const l=x.l,lp=x.lp,paid=x.paid,rem=x.rem,monthTotal=x.monthTotal,monthPaid=x.monthPaid,pct=x.pct,f=x.f;
+    const referenceLabel=x.exactCurrent?"Current month":"Reference month";
     return '<div class="mini-card">' +
       '<h3>'+esc(l.name)+'</h3>' +
       '<div class="small muted">'+esc(l.lender||"Loan")+' · '+(l.repayment_mode==="manual"?"Manual schedule":"Equal installments")+'</div>' +
@@ -339,15 +381,17 @@ function renderLoans() {
         '<div><span class="small muted">Original</span><span>'+money(f.principal)+'</span></div>' +
         '<div><span class="small muted">Final payable</span><span>'+money(f.finalPayable)+'</span></div>' +
         '<div><span class="small muted">Interest</span><span>'+money(f.interest)+' ('+f.rate.toFixed(1)+'%)</span></div>' +
+        '<div class="monthly-payment-line"><span class="small muted">Monthly payment <span class="tiny-muted">('+referenceLabel+')</span></span><span>'+money(x.referenceMonthly)+'</span></div>' +
       '</div>' +
       '<div class="small muted">'+monthText(l.start_jyear,l.start_jmonth)+' → '+monthText(l.end_jyear,l.end_jmonth)+' · '+lp.length+' payments</div>' +
       '<div class="progress"><span style="width:'+pct+'%"></span></div>' +
-      '<div class="small">'+paid.length+'/'+lp.length+' payments paid · Remaining '+money(rem)+'</div>' +
+      '<div class="small">'+paid.length+'/'+lp.length+' payments paid · '+x.unpaid.length+' remaining · Remaining '+money(rem)+'</div>' +
       '<div class="month-card-line"><span>This month</span><span>'+money(monthPaid)+' paid / '+money(monthTotal)+' total</span></div>' +
       '<div class="mini-actions"><button class="ghost loan-edit" data-id="'+l.id+'">Edit</button><button class="ghost loan-open-map" data-id="'+l.id+'">Payments</button><button class="ghost danger loan-delete" data-id="'+l.id+'">Delete</button></div>' +
       '</div>';
   }).join(""):'<div class="empty full">No loans defined yet.</div>';
 }
+
 function currentManualAmounts() {
   const map={};
   $$("#manualScheduleRows .manual-payment-input").forEach(input=>{map[input.dataset.key]=input.value;});
@@ -459,8 +503,15 @@ async function saveLoan(e) {
   if(finalPayable<principal){toast("Final payable amount cannot be lower than the original loan amount.");return;}
 
   let autoPastPaid=false;
-  if(!id && monthKey(sy,sm)<monthKey(selected.jy,selected.jm)){
-    autoPastPaid=confirm("This loan starts before the current Solar month. Mark all past installments before the current month as paid automatically?");
+  const pastInstallments=!id?schedule.filter(x=>monthKey(x.jyear,x.jmonth)<monthKey(selected.jy,selected.jm)):[];
+  if(!id && pastInstallments.length){
+    const firstPast=pastInstallments[0],lastPast=pastInstallments[pastInstallments.length-1];
+    autoPastPaid=confirm(
+      "This new loan has "+pastInstallments.length+" installment"+(pastInstallments.length===1?"":"s")+
+      " in past Solar months ("+monthText(firstPast.jyear,firstPast.jmonth)+" → "+monthText(lastPast.jyear,lastPast.jmonth)+").\n\n"+
+      "Automatically mark ALL of these past installments as PAID?\n\n"+
+      "OK = Yes, mark past installments paid\nCancel = No, keep them unpaid"
+    );
   }
 
   const last=schedule[schedule.length-1], installment=mode==="equal"?schedule[0].amount:null;
@@ -889,6 +940,8 @@ function bind() {
   $("dashClickedMonthPayments").onchange=e=>{if(e.target.classList.contains("dashboard-pay-toggle"))togglePayment(e.target.dataset.id,e.target.checked);};
 
   $("addLoanBtn").onclick=()=>openLoanDialog();
+  $("loanSortBy").onchange=()=>{loanSortBy=$("loanSortBy").value;renderLoans();};
+  $("loanSortOrder").onchange=()=>{loanSortOrder=$("loanSortOrder").value;renderLoans();};
   $("loanForm").onsubmit=saveLoan;
   $("loanRepaymentMode").onchange=syncLoanMode;
   ["loanTotal","loanStartYear","loanStartMonth","loanCount","loanInstallment"].forEach(id=>$(id).addEventListener("input",updateLoanSummary));
