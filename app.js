@@ -243,9 +243,11 @@ function renderDashboard() {
   $("dashClickedMonthTitle").textContent=monthText(dashboardYear,dashboardMonth)+" payments";
   $("dashClickedMonthPayments").innerHTML=clickedRows.length?clickedRows.map(p=>{
     const l=loans.find(x=>x.id===p.loan_id);
+    const totalCount=n(l?.payment_count)||payments.filter(x=>x.loan_id===p.loan_id).length;
     const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">Unpaid</span>';
     return '<div class="row dashboard-payment-row">' +
-      '<div><div class="row-title">'+esc(l?l.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+' · Installment '+p.installment_no+'</div></div>' +
+      '<div><div class="row-title">'+esc(l?l.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+'</div></div>' +
+      '<div class="payment-no-cell" title="Payment number"><span class="small muted">Payment No.</span><span>'+p.installment_no+'/'+totalCount+'</span></div>' +
       '<div>'+money(p.amount)+'</div><div>'+badge+'</div>' +
       '<div><input class="dashboard-pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div>' +
       '</div>';
@@ -280,9 +282,11 @@ function renderSelectedMonth() {
 
   $("paymentsList").innerHTML=t.rows.length?t.rows.map(p=>{
     const loan=loans.find(l=>l.id===p.loan_id);
+    const totalCount=n(loan?.payment_count)||payments.filter(x=>x.loan_id===p.loan_id).length;
     const badge=p.is_paid?'<span class="pill good">Paid</span>':'<span class="pill bad">'+(isPastMonth(p.due_jyear,p.due_jmonth)?"Overdue":"Unpaid")+'</span>';
-    return '<div class="row">' +
-      '<div><div class="row-title">'+esc(loan?loan.name:"Loan")+'</div><div class="small muted">Installment '+p.installment_no+' · day '+p.due_day+'</div></div>' +
+    return '<div class="row payment-table-row">' +
+      '<div><div class="row-title">'+esc(loan?loan.name:"Loan")+'</div><div class="small muted">Day '+p.due_day+'</div></div>' +
+      '<div class="payment-no-cell" title="Payment number"><span class="small muted">Payment No.</span><span>'+p.installment_no+'/'+totalCount+'</span></div>' +
       '<div>'+money(p.amount)+'</div><div class="mobile-hide">'+badge+'</div>' +
       '<div class="optional small muted">'+(p.paid_at ? "Paid "+new Date(p.paid_at).toLocaleDateString("en-US-u-ca-persian") : "Not paid")+'</div>' +
       '<div><input class="pay-toggle" type="checkbox" data-id="'+p.id+'" '+(p.is_paid?"checked":"")+' title="Mark paid/unpaid"></div></div>';
