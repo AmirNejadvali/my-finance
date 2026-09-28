@@ -354,3 +354,10 @@ dialog::backdrop{background:rgba(17,24,39,.46)}
 @media(max-width:760px){
   .payment-table-row,.dashboard-payment-row{grid-template-columns:28px 1fr auto auto}
 }
+
+.payment-table-row{grid-template-columns:32px minmax(180px,1.5fr) minmax(72px,.38fr) minmax(120px,.75fr) minmax(100px,.6fr) auto}
+.payment-ratio{font-weight:600;font-size:13px;letter-spacing:.1px}
+@media(max-width:760px){
+  .payment-table-row{grid-template-columns:28px 1fr auto auto}
+  .payment-table-row>div:nth-child(5){display:none}
+}
