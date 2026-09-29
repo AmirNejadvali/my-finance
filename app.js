@@ -1176,7 +1176,7 @@ function bind() {
 
   $("addSalaryBtn").onclick=()=>openSalaryDialog();
   $("salaryForm").onsubmit=saveSalary;
-  $("salaryDefinitionMode").onchange=()=>syncSalaryMode(true);
+  $("salaryDefinitionMode").onchange=()=>syncSalaryMode(!manualSalaryInitialized);
   ["salaryAmount","salaryGrowth"].forEach(id=>$(id).addEventListener("input",updateSalarySummary));
   ["salaryStartYear","salaryStartMonth","salaryEndYear","salaryEndMonth"].forEach(id=>{
     $(id).addEventListener("change",()=>{$("salaryDefinitionMode").value==="manual"?buildManualSalaryTable():updateSalarySummary();});
