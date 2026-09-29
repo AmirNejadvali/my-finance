@@ -26,6 +26,9 @@ let chartInstance = null;
 let adminKey = "";
 let passwordTargetUserId = null;
 let passwordTargetEmail = "";
+let manualSalaryCategories = [];
+let manualSalaryValues = {};
+let manualSalaryInitialized = false;
 
 function toast(msg) {
   const el = $("toast");
@@ -570,19 +573,150 @@ function salarySchedule(def) {
     return {jyear:d.jy,jmonth:d.jm,amount:amount};
   });
 }
+function salaryManualKey(jy,jm){return jy+"-"+String(jm).padStart(2,"0");}
+function captureManualSalaryValues() {
+  $$(".manual-salary-input").forEach(input=>{
+    const key=input.dataset.monthKey;
+    const idx=n(input.dataset.catIndex);
+    const cat=manualSalaryCategories[idx];
+    if(!key||!cat)return;
+    if(!manualSalaryValues[key])manualSalaryValues[key]={};
+    manualSalaryValues[key][cat]=Math.max(0,Math.round(n(input.value)));
+  });
+}
+function manualSalaryRows() {
+  captureManualSalaryValues();
+  const sy=n($("salaryStartYear").value),sm=n($("salaryStartMonth").value);
+  const ey=n($("salaryEndYear").value),em=n($("salaryEndMonth").value);
+  const count=monthSpan(sy,sm,ey,em);
+  if(count<1||count>600)return [];
+  return Array.from({length:count},(_,i)=>{
+    const d=addJMonth(sy,sm,i),key=salaryManualKey(d.jy,d.jm);
+    const categoryValues={};
+    let total=0;
+    manualSalaryCategories.forEach(cat=>{
+      const value=Math.max(0,Math.round(n(manualSalaryValues[key]?.[cat])));
+      categoryValues[cat]=value;
+      total+=value;
+    });
+    return {jyear:d.jy,jmonth:d.jm,amount:total,category_values:categoryValues};
+  });
+}
+function buildManualSalaryTable() {
+  captureManualSalaryValues();
+  const sy=n($("salaryStartYear").value),sm=n($("salaryStartMonth").value);
+  const ey=n($("salaryEndYear").value),em=n($("salaryEndMonth").value);
+  const count=monthSpan(sy,sm,ey,em);
+  if(count<1||count>600){
+    $("manualSalaryTableWrap").innerHTML='<div class="empty">Choose a valid month domain.</div>';
+    updateSalarySummary();
+    return;
+  }
+  if(!manualSalaryCategories.length){
+    $("manualSalaryTableWrap").innerHTML='<div class="empty">Add at least one category to build the table.</div>';
+    updateSalarySummary();
+    return;
+  }
+
+  let out='<table class="manual-salary-table"><thead><tr><th>Solar month</th>';
+  manualSalaryCategories.forEach((cat,idx)=>{
+    out+='<th><div class="manual-cat-head"><span>'+esc(cat)+'</span><button type="button" class="manual-cat-remove" data-remove-cat="'+idx+'" title="Remove category">×</button></div></th>';
+  });
+  out+='<th>Total</th></tr></thead><tbody>';
+
+  for(let i=0;i<count;i++){
+    const d=addJMonth(sy,sm,i),key=salaryManualKey(d.jy,d.jm);
+    if(!manualSalaryValues[key])manualSalaryValues[key]={};
+    let total=0;
+    out+='<tr data-manual-row="'+key+'"><td class="manual-month-cell">'+MONTHS[d.jm-1]+' '+d.jy+'</td>';
+    manualSalaryCategories.forEach((cat,idx)=>{
+      const value=Math.max(0,Math.round(n(manualSalaryValues[key][cat])));
+      total+=value;
+      out+='<td><input class="manual-salary-input" type="number" min="0" step="1" value="'+value+'" data-month-key="'+key+'" data-cat-index="'+idx+'" aria-label="'+esc(cat)+' '+MONTHS[d.jm-1]+' '+d.jy+'"></td>';
+    });
+    out+='<td class="manual-row-total">'+money(total)+'</td></tr>';
+  }
+  out+='</tbody></table>';
+  $("manualSalaryTableWrap").innerHTML=out;
+  updateSalarySummary();
+}
+function addManualSalaryCategory() {
+  const input=$("manualSalaryCategoryName");
+  const name=input.value.trim();
+  if(!name)return;
+  if(manualSalaryCategories.some(x=>x.toLowerCase()===name.toLowerCase())){
+    toast("This category already exists.");
+    return;
+  }
+  captureManualSalaryValues();
+  manualSalaryCategories.push(name);
+  input.value="";
+  buildManualSalaryTable();
+}
+function removeManualSalaryCategory(index) {
+  captureManualSalaryValues();
+  const cat=manualSalaryCategories[index];
+  if(cat==null)return;
+  manualSalaryCategories.splice(index,1);
+  Object.values(manualSalaryValues).forEach(values=>{if(values&&typeof values==="object")delete values[cat];});
+  buildManualSalaryTable();
+}
+function syncSalaryMode(resetManualDomain=false) {
+  const manual=$("salaryDefinitionMode").value==="manual";
+  $("salaryForecastFields").classList.toggle("hidden",manual);
+  $("salaryManualSection").classList.toggle("hidden",!manual);
+  $("salaryPayDayField").classList.toggle("hidden",manual);
+  $("salaryAmount").required=!manual;
+  $("salaryDialog").classList.toggle("salary-manual-dialog",manual);
+
+  if(manual){
+    if(resetManualDomain||!manualSalaryInitialized){
+      const c=currentJalali();
+      $("salaryStartYear").value=c.jy;
+      $("salaryStartMonth").value=1;
+      $("salaryEndYear").value=c.jy;
+      $("salaryEndMonth").value=12;
+      manualSalaryInitialized=true;
+      if(!manualSalaryCategories.length)manualSalaryCategories=["Salary"];
+    }
+    buildManualSalaryTable();
+  }else{
+    updateSalarySummary();
+  }
+}
 function renderSalaries() {
   $("salaryGrid").innerHTML=salaries.length?salaries.map(s=>{
     const rows=salaryMonths.filter(x=>x.salary_id===s.id);
     const total=rows.reduce((sum,x)=>sum+n(x.amount),0);
+    const manual=s.definition_mode==="manual";
+    if(manual){
+      const cats=Array.isArray(s.manual_categories)?s.manual_categories:[];
+      return '<div class="mini-card"><h3>'+esc(s.person_name)+'</h3><div class="small muted">'+esc(s.title||"Salary")+' · Manual table</div>' +
+        '<div class="loan-figures"><div><span class="small muted">Categories</span><span>'+cats.length+'</span></div><div><span class="small muted">Entered months</span><span>'+rows.length+'</span></div><div><span class="small muted">Total earnings</span><span>'+money(total)+'</span></div></div>' +
+        '<div class="small muted">'+monthText(s.start_jyear,s.start_jmonth)+' → '+monthText(s.end_jyear,s.end_jmonth)+(cats.length?' · '+esc(cats.join(", ")):'')+'</div>' +
+        '<div class="mini-actions"><button class="ghost salary-edit" data-id="'+s.id+'">Edit</button><button class="ghost danger salary-delete" data-id="'+s.id+'">Delete</button></div></div>';
+    }
     const first=rows.length?n(rows[0].amount):n(s.base_monthly_amount);
     const last=rows.length?n(rows[rows.length-1].amount):n(s.base_monthly_amount);
-    return '<div class="mini-card"><h3>'+esc(s.person_name)+'</h3><div class="small muted">'+esc(s.title||"Salary")+'</div>' +
+    return '<div class="mini-card"><h3>'+esc(s.person_name)+'</h3><div class="small muted">'+esc(s.title||"Salary")+' · Automatic forecast</div>' +
       '<div class="loan-figures"><div><span class="small muted">Starting monthly</span><span>'+money(first)+'</span></div><div><span class="small muted">Ending monthly</span><span>'+money(last)+'</span></div><div><span class="small muted">Forecast total</span><span>'+money(total)+'</span></div></div>' +
       '<div class="small muted">'+monthText(s.start_jyear,s.start_jmonth)+' → '+monthText(s.end_jyear,s.end_jmonth)+' · annual growth '+n(s.annual_growth_percent).toFixed(1)+'%</div>' +
       '<div class="mini-actions"><button class="ghost salary-edit" data-id="'+s.id+'">Edit</button><button class="ghost danger salary-delete" data-id="'+s.id+'">Delete</button></div></div>';
   }).join(""):'<div class="empty full">No salary definitions yet.</div>';
 }
 function updateSalarySummary() {
+  if($("salaryDefinitionMode").value==="manual"){
+    const rows=manualSalaryRows();
+    $("salaryMonthsCount").textContent=String(rows.length);
+    $("salaryFirstAmount").textContent=money(rows.length?rows[0].amount:0);
+    $("salaryLastAmount").textContent=money(rows.length?rows[rows.length-1].amount:0);
+    $("salaryForecastTotal").textContent=money(rows.reduce((s,x)=>s+n(x.amount),0));
+    if(!manualSalaryCategories.length)$("salarySummaryWarning").textContent="Add at least one category.";
+    else if(!rows.length)$("salarySummaryWarning").textContent="End month must be after the start month.";
+    else $("salarySummaryWarning").textContent="";
+    return;
+  }
+
   const def={
     base_monthly_amount:n($("salaryAmount").value),
     start_jyear:n($("salaryStartYear").value),start_jmonth:n($("salaryStartMonth").value),
@@ -597,33 +731,97 @@ function updateSalarySummary() {
   $("salarySummaryWarning").textContent=rows.length?"":"End month must be after the start month.";
 }
 function openSalaryDialog(id=null) {
-  $("salaryForm").reset();$("salaryId").value=id||"";$("salaryModalTitle").textContent=id?"Edit salary definition":"Add salary definition";
+  $("salaryForm").reset();
+  $("salaryId").value=id||"";
+  $("salaryModalTitle").textContent=id?"Edit salary definition":"Add salary definition";
+  manualSalaryCategories=[];
+  manualSalaryValues={};
+  manualSalaryInitialized=false;
+
   const c=currentJalali(),end=addJMonth(c.jy,c.jm,59);
-  $("salaryStartYear").value=c.jy;$("salaryStartMonth").value=c.jm;$("salaryEndYear").value=end.jy;$("salaryEndMonth").value=end.jm;$("salaryGrowth").value=0;$("salaryPayDay").value=1;
+  $("salaryDefinitionMode").value="forecast";
+  $("salaryStartYear").value=c.jy;
+  $("salaryStartMonth").value=c.jm;
+  $("salaryEndYear").value=end.jy;
+  $("salaryEndMonth").value=end.jm;
+  $("salaryGrowth").value=0;
+  $("salaryPayDay").value=1;
+
   if(id){
     const s=salaries.find(x=>x.id===id);if(!s)return;
-    $("salaryPerson").value=s.person_name||"";$("salaryTitle").value=s.title||"";$("salaryAmount").value=s.base_monthly_amount||"";
-    $("salaryStartYear").value=s.start_jyear;$("salaryStartMonth").value=s.start_jmonth;$("salaryEndYear").value=s.end_jyear;$("salaryEndMonth").value=s.end_jmonth;
-    $("salaryGrowth").value=s.annual_growth_percent||0;$("salaryPayDay").value=s.pay_day||1;$("salaryNotes").value=s.notes||"";
+    $("salaryPerson").value=s.person_name||"";
+    $("salaryTitle").value=s.title||"";
+    $("salaryDefinitionMode").value=s.definition_mode||"forecast";
+    $("salaryAmount").value=s.base_monthly_amount||"";
+    $("salaryStartYear").value=s.start_jyear;
+    $("salaryStartMonth").value=s.start_jmonth;
+    $("salaryEndYear").value=s.end_jyear;
+    $("salaryEndMonth").value=s.end_jmonth;
+    $("salaryGrowth").value=s.annual_growth_percent||0;
+    $("salaryPayDay").value=s.pay_day||1;
+    $("salaryNotes").value=s.notes||"";
+
+    if($("salaryDefinitionMode").value==="manual"){
+      manualSalaryCategories=Array.isArray(s.manual_categories)?s.manual_categories.slice():[];
+      salaryMonths.filter(x=>x.salary_id===id).forEach(row=>{
+        const key=salaryManualKey(row.due_jyear,row.due_jmonth);
+        manualSalaryValues[key]=(row.category_values&&typeof row.category_values==="object")?Object.assign({},row.category_values):{};
+      });
+      manualSalaryInitialized=true;
+    }
   }
-  updateSalarySummary();$("salaryDialog").showModal();
+  syncSalaryMode(false);
+  updateSalarySummary();
+  $("salaryDialog").showModal();
 }
 async function saveSalary(e) {
   e.preventDefault();
   const id=$("salaryId").value||null;
-  const def={
-    person_name:$("salaryPerson").value.trim(),title:$("salaryTitle").value.trim()||"Salary",
-    base_monthly_amount:Math.round(n($("salaryAmount").value)),
-    start_jyear:n($("salaryStartYear").value),start_jmonth:n($("salaryStartMonth").value),
-    end_jyear:n($("salaryEndYear").value),end_jmonth:n($("salaryEndMonth").value),
-    annual_growth_percent:n($("salaryGrowth").value),pay_day:n($("salaryPayDay").value),
-    notes:$("salaryNotes").value.trim()
-  };
-  const schedule=salarySchedule(def);
-  if(!def.person_name||def.base_monthly_amount<=0||!schedule.length){toast("Complete the salary definition.");return;}
+  const mode=$("salaryDefinitionMode").value;
+  const person=$("salaryPerson").value.trim();
+  const title=$("salaryTitle").value.trim()||"Salary";
+  const sy=n($("salaryStartYear").value),sm=n($("salaryStartMonth").value);
+  const ey=n($("salaryEndYear").value),em=n($("salaryEndMonth").value);
+
+  let def,schedule;
+  if(mode==="manual"){
+    const allRows=manualSalaryRows();
+    schedule=allRows.filter(x=>x.amount>0);
+    if(!person||!manualSalaryCategories.length||!allRows.length||!schedule.length){
+      toast("Add categories and enter at least one manual monthly value.");
+      return;
+    }
+    def={
+      person_name:person,title,
+      definition_mode:"manual",
+      manual_categories:manualSalaryCategories.slice(),
+      base_monthly_amount:schedule[0].amount,
+      start_jyear:sy,start_jmonth:sm,end_jyear:ey,end_jmonth:em,
+      annual_growth_percent:0,pay_day:1,
+      notes:$("salaryNotes").value.trim()
+    };
+  }else{
+    def={
+      person_name:person,title,
+      definition_mode:"forecast",
+      manual_categories:[],
+      base_monthly_amount:Math.round(n($("salaryAmount").value)),
+      start_jyear:sy,start_jmonth:sm,end_jyear:ey,end_jmonth:em,
+      annual_growth_percent:n($("salaryGrowth").value),pay_day:n($("salaryPayDay").value),
+      notes:$("salaryNotes").value.trim()
+    };
+    schedule=salarySchedule(def);
+    if(!def.person_name||def.base_monthly_amount<=0||!schedule.length){
+      toast("Complete the salary definition.");
+      return;
+    }
+  }
+
   const r=await sb.rpc("save_salary_definition",{p_salary_id:id,p_definition:def,p_schedule:schedule});
   if(r.error){toast(r.error.message);return;}
-  $("salaryDialog").close();toast(id?"Salary definition updated.":"Salary definition added.");await refreshAll();
+  $("salaryDialog").close();
+  toast(id?"Salary definition updated.":"Salary definition added.");
+  await refreshAll();
 }
 
 function renderAccounts() {
@@ -978,7 +1176,31 @@ function bind() {
 
   $("addSalaryBtn").onclick=()=>openSalaryDialog();
   $("salaryForm").onsubmit=saveSalary;
-  ["salaryAmount","salaryStartYear","salaryStartMonth","salaryEndYear","salaryEndMonth","salaryGrowth"].forEach(id=>$(id).addEventListener("input",updateSalarySummary));
+  $("salaryDefinitionMode").onchange=()=>syncSalaryMode(true);
+  ["salaryAmount","salaryGrowth"].forEach(id=>$(id).addEventListener("input",updateSalarySummary));
+  ["salaryStartYear","salaryStartMonth","salaryEndYear","salaryEndMonth"].forEach(id=>{
+    $(id).addEventListener("change",()=>{$("salaryDefinitionMode").value==="manual"?buildManualSalaryTable():updateSalarySummary();});
+    $(id).addEventListener("input",()=>{$("salaryDefinitionMode").value==="manual"?buildManualSalaryTable():updateSalarySummary();});
+  });
+  $("manualSalaryAddCategory").onclick=addManualSalaryCategory;
+  $("manualSalaryCategoryName").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();addManualSalaryCategory();}};
+  $("manualSalaryTableWrap").onclick=e=>{
+    const b=e.target.closest("[data-remove-cat]");if(!b)return;
+    removeManualSalaryCategory(n(b.dataset.removeCat));
+  };
+  $("manualSalaryTableWrap").oninput=e=>{
+    const input=e.target.closest(".manual-salary-input");if(!input)return;
+    const key=input.dataset.monthKey,cat=manualSalaryCategories[n(input.dataset.catIndex)];
+    if(!manualSalaryValues[key])manualSalaryValues[key]={};
+    manualSalaryValues[key][cat]=Math.max(0,Math.round(n(input.value)));
+    const row=input.closest("tr");
+    if(row){
+      const total=Array.from(row.querySelectorAll(".manual-salary-input")).reduce((s,x)=>s+n(x.value),0);
+      const totalCell=row.querySelector(".manual-row-total");
+      if(totalCell)totalCell.textContent=money(total);
+    }
+    updateSalarySummary();
+  };
   $("salaryGrid").onclick=async e=>{
     const edit=e.target.closest(".salary-edit"),del=e.target.closest(".salary-delete");
     if(edit)openSalaryDialog(edit.dataset.id);
