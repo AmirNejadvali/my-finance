@@ -602,8 +602,8 @@ function manualSalaryRows() {
     return {jyear:d.jy,jmonth:d.jm,amount:total,category_values:categoryValues};
   });
 }
-function buildManualSalaryTable() {
-  captureManualSalaryValues();
+function buildManualSalaryTable(captureExisting=true) {
+  if(captureExisting)captureManualSalaryValues();
   const sy=n($("salaryStartYear").value),sm=n($("salaryStartMonth").value);
   const ey=n($("salaryEndYear").value),em=n($("salaryEndMonth").value);
   const count=monthSpan(sy,sm,ey,em);
@@ -737,6 +737,7 @@ function openSalaryDialog(id=null) {
   manualSalaryCategories=[];
   manualSalaryValues={};
   manualSalaryInitialized=false;
+  $("manualSalaryTableWrap").innerHTML="";
 
   const c=currentJalali(),end=addJMonth(c.jy,c.jm,59);
   $("salaryDefinitionMode").value="forecast";
@@ -770,7 +771,17 @@ function openSalaryDialog(id=null) {
       manualSalaryInitialized=true;
     }
   }
-  syncSalaryMode(false);
+  const manualEdit=id&&$("salaryDefinitionMode").value==="manual";
+  if(manualEdit){
+    $("salaryForecastFields").classList.add("hidden");
+    $("salaryManualSection").classList.remove("hidden");
+    $("salaryPayDayField").classList.add("hidden");
+    $("salaryAmount").required=false;
+    $("salaryDialog").classList.add("salary-manual-dialog");
+    buildManualSalaryTable(false);
+  }else{
+    syncSalaryMode(false);
+  }
   updateSalarySummary();
   $("salaryDialog").showModal();
 }
